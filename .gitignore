@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.env
+
+# Runtime metadata and generated calculations
+var/*
+!var/.gitkeep
+runs/
+
+# Licensed VASP data and large calculation artifacts
+POTCAR
+POTCAR.*
+# Git on Windows matches case-insensitively; keep the source package visible.
+!src/**/potcar/
+WAVECAR
+CHGCAR
+CHG
+vasprun.xml
+OUTCAR
+

@@ -1,0 +1,2 @@
+# Keep repository text LF so VASP input fixtures are byte-stable across platforms.
+* text=auto eol=lf
