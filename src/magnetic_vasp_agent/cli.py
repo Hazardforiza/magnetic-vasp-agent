@@ -14,6 +14,7 @@ from magnetic_vasp_agent.models import (
     MagneticMode,
     PotentialPlan,
 )
+from magnetic_vasp_agent.poscar import read_poscar
 from magnetic_vasp_agent.potcar import (
     assemble_potcar,
     load_policy,
@@ -26,7 +27,9 @@ from magnetic_vasp_agent.potcar import (
 
 app = typer.Typer(no_args_is_help=True, help="Local magnetic VASP control plane.")
 potcar_app = typer.Typer(no_args_is_help=True, help="Manage licensed POTCAR data.")
+structure_app = typer.Typer(no_args_is_help=True, help="Inspect crystal structures.")
 app.add_typer(potcar_app, name="potcar")
+app.add_typer(structure_app, name="structure")
 
 
 @app.command()
@@ -50,12 +53,36 @@ def scan_potcar(
     typer.echo(str(output.resolve()))
 
 
+@structure_app.command("show")
+def show_structure(
+    poscar: Path = typer.Argument(..., exists=True, dir_okay=False),
+) -> None:
+    """Print the species order and atom counts parsed from a POSCAR."""
+    structure = read_poscar(poscar)
+    typer.echo(f"comment   {structure.comment}")
+    typer.echo(f"formula   {structure.formula}")
+    typer.echo(f"atoms     {structure.num_atoms}")
+    typer.echo(f"mode      {structure.coordinate_mode.value}")
+    typer.echo("species   " + " ".join(structure.species_order))
+    typer.echo("counts    " + " ".join(str(count) for count in structure.counts))
+    if structure.selective_dynamics is not None:
+        typer.echo("selective dynamics enabled")
+
+
 @potcar_app.command("select")
 def select_potcar(
     registry_path: Path = typer.Option(..., "--registry", exists=True, dir_okay=False),
     policy_path: Path = typer.Option(..., "--policy", exists=True, dir_okay=False),
-    candidate_id: str = typer.Option(..., "--candidate-id"),
-    elements: list[str] = typer.Option(..., "--element"),
+    poscar: Path | None = typer.Option(
+        None, "--poscar", exists=True, dir_okay=False,
+        help="Derive species order from this POSCAR (preferred).",
+    ),
+    elements: list[str] | None = typer.Option(
+        None, "--element", help="Manual species order; mutually exclusive with --poscar."
+    ),
+    candidate_id: str | None = typer.Option(
+        None, "--candidate-id", help="Defaults to the POSCAR formula when --poscar is used."
+    ),
     task: CalculationTask = typer.Option(CalculationTask.STATIC, "--task"),
     magnetic_mode: MagneticMode = typer.Option(
         MagneticMode.COLLINEAR, "--magnetic-mode"
@@ -63,12 +90,19 @@ def select_potcar(
     output: Path | None = typer.Option(None, "--output"),
 ) -> None:
     """Create a deterministic baseline potential plan in POSCAR species order."""
+    if poscar is not None and elements:
+        raise typer.BadParameter("use either --poscar or --element, not both")
+    if poscar is not None:
+        candidate = CandidateComposition.from_structure(read_poscar(poscar), candidate_id)
+    elif elements:
+        if candidate_id is None:
+            raise typer.BadParameter("--candidate-id is required with --element")
+        candidate = CandidateComposition(candidate_id=candidate_id, species_order=elements)
+    else:
+        raise typer.BadParameter("provide --poscar or at least one --element")
+
     registry = load_registry(registry_path)
     policy = load_policy(policy_path)
-    candidate = CandidateComposition(
-        candidate_id=candidate_id,
-        species_order=elements,
-    )
     goal = CalculationGoal(
         task=task,
         magnetic_mode=magnetic_mode,
