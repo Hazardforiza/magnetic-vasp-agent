@@ -14,6 +14,12 @@ from magnetic_vasp_agent.execution_models import (
 )
 from magnetic_vasp_agent.execution_probe import collect_probe, probe_preview
 from magnetic_vasp_agent.execution_simulator import simulate
+from magnetic_vasp_agent.transfer import (
+    build_transfer_plan,
+    transfer_bundle,
+    write_transfer_report,
+)
+from magnetic_vasp_agent.transfer_models import TransferRequest
 from magnetic_vasp_agent.workflow import json_bytes
 
 execution_app = typer.Typer(no_args_is_help=True, help="Prepare SSH/direct-MPI plans; remote execution is disabled.")
@@ -85,5 +91,25 @@ def simulation(
     """Run a fixed tiny local Python process, not VASP, SSH or an arbitrary command."""
     try:
         _emit(simulate(output, scenario.value), None)
+    except (ValueError, OSError) as exc:
+        _error(exc)
+
+
+@execution_app.command("transfer")
+def transfer(
+    bundle: Path = typer.Option(..., "--bundle", exists=True, file_okay=False),
+    profile: Path = typer.Option(..., "--profile", exists=True, dir_okay=False),
+    request: Path = typer.Option(..., "--request", exists=True, dir_okay=False),
+    connect: bool = typer.Option(False, "--connect", help="Explicitly upload through fixed SFTP and verify hashes."),
+    output: Path | None = typer.Option(None, "--output"),
+) -> None:
+    """Plan by default; --connect performs only the controlled package transfer."""
+    try:
+        settings = ClusterProfile.model_validate_json(profile.read_bytes())
+        transfer_request = TransferRequest.model_validate_json(request.read_bytes())
+        report = transfer_bundle(bundle, settings, transfer_request) if connect else build_transfer_plan(bundle, settings, transfer_request)
+        if output:
+            write_transfer_report(report, output)
+        typer.echo(json_bytes(report).decode("utf-8"), nl=False)
     except (ValueError, OSError) as exc:
         _error(exc)

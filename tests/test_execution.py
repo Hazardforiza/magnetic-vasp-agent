@@ -31,6 +31,8 @@ from magnetic_vasp_agent.models import (
     PotentialRecord,
     PotentialRegistry,
 )
+from magnetic_vasp_agent.transfer import build_transfer_plan, transfer_bundle
+from magnetic_vasp_agent.transfer_models import TransferRequest
 from magnetic_vasp_agent.workflow import (
     digest,
     json_bytes,
@@ -353,3 +355,94 @@ def test_cli_previews_never_connect_and_have_no_launch_option(packages, monkeypa
     assert json.loads(result.output)["ready_to_run"] is False
     for command in ("launch", "upload", "cancel", "retry"):
         assert runner.invoke(app, ["execution", command]).exit_code == 2
+
+
+def test_transfer_plan_is_scoped_and_non_overwriting(packages):
+    profile = ClusterProfile(remote_root="/home/zyy/magvasp/runs")
+    request = TransferRequest(node="cu21", run_id="review")
+    report = build_transfer_plan(packages["FeO.generated.mcif"], profile, request)
+    assert report["ready_to_transfer"] is True
+    assert report["transferred"] is False
+    assert report["remote_directory"].endswith("--review")
+    assert len(report["files"]) == 16
+    assert "POTCAR" in report["sftp_batch"]
+    assert "put" in report["sftp_batch"]
+    assert "rm " not in report["sftp_batch"]
+    assert "vasp_" not in report["sftp_batch"]
+    assert "test ! -e" in report["ssh_guard_stdin"]
+    assert "mkdir --" in report["ssh_guard_stdin"]
+    assert report["execution_enabled"] is False
+
+
+def test_transfer_plan_rejects_unapproved_files(packages):
+    bundle = packages["FeO.generated.mcif"]
+    (bundle / "candidate-01" / "OUTCAR").write_text("not uploaded")
+    with pytest.raises(ValueError, match="TRANSFER_SCOPE"):
+        build_transfer_plan(bundle, ClusterProfile(remote_root="/home/zyy/magvasp/runs"), TransferRequest(node="cu21", run_id="review"))
+
+
+def test_transfer_plan_rejects_bundle_and_manifest_symlinks(packages, tmp_path):
+    bundle = packages["FeO.generated.mcif"]
+    link = tmp_path / "bundle-link"
+    try:
+        link.symlink_to(bundle, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(ValueError, match="TRANSFER_SCOPE"):
+        build_transfer_plan(link, ClusterProfile(remote_root="/home/zyy/magvasp/runs"), TransferRequest(node="cu21", run_id="review"))
+    manifest_link = bundle / "workflow.manifest.json.link"
+    manifest_link.symlink_to(bundle / "workflow.manifest.json")
+    with pytest.raises(ValueError, match="TRANSFER_SCOPE"):
+        build_transfer_plan(bundle, ClusterProfile(remote_root="/home/zyy/magvasp/runs"), TransferRequest(node="cu21", run_id="review"))
+
+
+def test_transfer_plan_rejects_unsafe_request_and_root():
+    with pytest.raises(ValueError):
+        TransferRequest(node="cu21", run_id="../review")
+    with pytest.raises(ValueError):
+        ClusterProfile(remote_root="/home/zyy/magvasp/runs/../old")
+
+
+def test_transfer_upload_verifies_hashes_and_never_runs_vasp(packages, monkeypatch):
+    profile = ClusterProfile(remote_root="/home/zyy/magvasp/runs")
+    request = TransferRequest(node="cu21", run_id="verified")
+    plan = build_transfer_plan(packages["FeO.generated.mcif"], profile, request)
+    calls = []
+
+    monkeypatch.setattr("magnetic_vasp_agent.transfer.shutil.which", lambda name: name)
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        if argv[0] == "ssh" and "sha256sum" in kwargs["input"].decode():
+            lines = ["MAGVASP_TRANSFER_V1"]
+            for item in plan["files"]:
+                lines.append(f"{item['sha256']}  {plan['remote_directory']}/{item['relative_path']}")
+            return SimpleNamespace(returncode=0, stdout=("\n".join(lines) + "\n").encode(), stderr=b"")
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr("magnetic_vasp_agent.transfer.subprocess.run", run)
+    report = transfer_bundle(packages["FeO.generated.mcif"], profile, request)
+    assert report["transferred"] is True
+    assert report["remote_hashes_verified"] is True
+    assert len(calls) == 3
+    assert calls[0][0][0] == "ssh"
+    assert calls[1][0][0] == "sftp"
+    assert calls[2][0][0] == "ssh"
+    assert all(call[1]["shell"] is False for call in calls)
+    assert all("vasp" not in " ".join(call[0]).lower() for call in calls)
+
+
+def test_transfer_stops_after_directory_guard_failure(packages, monkeypatch):
+    profile = ClusterProfile(remote_root="/home/zyy/magvasp/runs")
+    request = TransferRequest(node="cu21", run_id="guard-fails")
+    monkeypatch.setattr("magnetic_vasp_agent.transfer.shutil.which", lambda name: name)
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv[0])
+        return SimpleNamespace(returncode=17, stdout=b"", stderr=b"remote directory exists")
+
+    monkeypatch.setattr("magnetic_vasp_agent.transfer.subprocess.run", run)
+    with pytest.raises(ValueError, match="REMOTE_DIRECTORY_GUARD_FAILED"):
+        transfer_bundle(packages["FeO.generated.mcif"], profile, request)
+    assert calls == ["ssh"]

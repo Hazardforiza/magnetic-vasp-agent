@@ -353,6 +353,22 @@ uv run --frozen magvasp execution simulate `
 
 第八步的 `ResourceAssessment.ready_to_run` 和执行报告的 `ready_to_run` 固定为 `false`。后续真正启用需要先由用户确认本组资源使用规则和空闲窗口，再用一个无科学结果的最小 MPI smoke test 验证单节点隔离、CPU 绑定、退出码和日志；这不是由 LLM 自主决定的步骤。LLM 可以提出执行计划和解释异常，但不能生成任意 shell、绕过节点白名单、选择 mu01、取消他人进程或自动重试。
 
+## 第九步：受控 SSH/SFTP 上传（默认只生成计划）
+
+第九步把已经通过第六、七步校验的 workflow 包绑定到一个新的远程目录。`execution transfer` 默认只生成传输计划，列出允许上传的输入文件、SHA256、固定 SSH/SFTP 参数和远端哈希校验脚本。上传范围严格为每步的 `POSCAR/POTCAR/INCAR/KPOINTS/manifest.json` 以及顶层 `workflow.manifest.json`；不会上传 `OUTCAR`、`CHGCAR`、`WAVECAR`、`vasprun.xml` 或任意用户文件。
+
+远端 `remote_root` 必须由你先确认是组内批准、已存在且有配额的专用目录，例如 `/home/zyy/magvasp/runs`。程序只创建其下的本次唯一叶目录，并使用 `test ! -e` 和 `test ! -L` 拒绝覆盖或跟随链接；失败目录不会自动删除，避免误删已有数据。传输完成后，固定的 `sha256sum` 输出必须与本地清单逐项一致，否则报告失败，不进入运行阶段。
+
+```powershell
+# 只生成计划，不连接集群
+uv run --frozen magvasp execution transfer `
+  --bundle var\step7\FeO-generated `
+  --profile config\execution\cluster.json `
+  --request config\execution\FeO.cu21.transfer.json
+```
+
+只有显式加入 `--connect` 才会执行受控传输；这不是 VASP 提交，也不会执行 MPI。由于当前配置的 `remote_root` 为 `null`，命令会安全地拒绝，直到你确认远程专用目录后再另行修改配置。第九步仍不会提供 `launch`、`cancel` 或 `retry` 命令。
+
 ## 历史审计与测试
 
 按相邻 POSCAR 和所选势检查全部原始 INCAR：
