@@ -17,6 +17,7 @@ from magnetic_vasp_agent.incar import (
 )
 from magnetic_vasp_agent.incar_models import IncarRecipeRequest
 from magnetic_vasp_agent.incar_recipes import build_incar
+from magnetic_vasp_agent.kpoints_cli import kpoints_app
 from magnetic_vasp_agent.models import (
     CalculationGoal,
     CalculationTask,
@@ -43,6 +44,7 @@ incar_app = typer.Typer(
 app.add_typer(potcar_app, name="potcar")
 app.add_typer(structure_app, name="structure")
 app.add_typer(incar_app, name="incar")
+app.add_typer(kpoints_app, name="kpoints")
 
 
 @app.command()
