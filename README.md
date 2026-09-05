@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-已实现本地授权赝势库扫描、POSCAR 类型模型、赝势选择与拼接，以及类型化 INCAR、KPOINTS 的解析、校验和生成。目前尚未接入 mCIF 转换、大模型或集群提交，也没有执行真实 VASP 计算。
+已实现本地授权赝势库扫描、POSCAR 类型模型、赝势选择与拼接、类型化 INCAR/KPOINTS，以及第六步的完整输入包装配、计算依赖检查和参数扫描模板。目前尚未接入 mCIF 转换、大模型或集群提交，也没有执行真实 VASP 计算。
 
 ## 本地环境
 
@@ -109,9 +109,9 @@ uv run --frozen magvasp incar build `
 - `hubbard` 按元素给出 `l`、`u`、`j`，单位 eV，程序按物种顺序生成 `LDAUTYPE=2` 数组。SrRuO3 的 U=1.2、J=0.6 对应 U_eff=0.6 eV。U/J 不从 POTCAR 推断。
 - ENCUT 下限取所选势的最大 ENMAX，不取整个势库最大值。满足下限不代表收敛。
 - SOC/非共线使用正值或省略 ISYM 会提示复核；关闭对称性是项目策略，不是 VASP 的普遍硬性限制。
-- 历史 `SOCSCALE` 保留并提示核实目标二进制支持情况，当前预设不生成它。
+- 历史 `SOCSCALE` 保留并提示核实目标二进制支持情况，单文件 INCAR 预设不生成它；第六步工作流可通过受能力声明约束的选项生成。
 
-CHGCAR/WAVECAR 兼容性、mCIF 转换、各向异性能量比较的一致性设置和真实 VASP 执行仍需后续模块处理。`valid=true` 仅表示已实现的检查通过，不代表存在完整可运行任务。
+INCAR 模块只声明重启依赖；第六步工作流层检查来源步骤及输入级兼容性。实际 CHGCAR/WAVECAR 的内容、上游收敛、mCIF 转换和真实 VASP 执行仍需后续模块处理。`valid=true` 仅表示已实现的检查通过，不代表计算已经就绪或收敛。
 
 ## 第五步：类型化 KPOINTS
 
@@ -192,6 +192,83 @@ uv run --frozen magvasp kpoints build `
 上述 INCAR 来自第四步示例。能带示例需先以 `task=band` 生成新的赝势计划和 INCAR，再给 KPOINTS 命令提供对应能带请求，不应直接复用 SCF 的 goal。
 
 `build` 同时写出 `KPOINTS.manifest.json`，记录共同 goal、预设版本、坐标约定、校验结果以及 KPOINTS、POSCAR、INCAR、两份请求文件的哈希。已有输出不覆盖。`show/validate/build` 的退出码约定与 INCAR 命令一致。
+
+## 第六步：本地计算与工作流装配
+
+`workflow_models.py` 定义 `CalculationStep`、`Workflow`、声明式产物依赖和扫描模板。`workflow.py` 复用前四类生成器，完成整包交叉校验和本地文件装配。一个步骤对应一个目录；只有一个步骤的 Workflow 就是单次计算请求，不额外维护第二套装配接口。
+
+### 一份请求生成整包
+
+```powershell
+uv run --frozen magvasp workflow validate `
+  --request config\workflows\Mn3Al.scf-dos-band.json `
+  --registry var\potcar_registry.json --policy config\potential_policy.json
+
+uv run --frozen magvasp workflow build `
+  --request config\workflows\Mn3Al.scf-dos-band.json `
+  --registry var\potcar_registry.json --policy config\potential_policy.json `
+  --output var\demo-workflow\Mn3Al
+
+uv run --frozen magvasp workflow inspect var\demo-workflow\Mn3Al
+```
+
+`validate` 在内存中准备输入并核实所选 POTCAR 源哈希，不写输出。`build` 是本地 dry-run 装配：会写输入文件，但绝不执行 VASP、SSH、Slurm 或 LLM。`inspect` 检查已经生成的全部输入及每步 manifest 哈希；它不是科学有效性复核，也不能抵御输入和 manifest 被同时重写。命令成功退出 0；请求、依赖、完整性或文件错误退出 2。
+
+输出布局如下，SCF 分别向 DOS 与 band 提供 CHGCAR，而不是 DOS 向 band 传递：
+
+```text
+Mn3Al/
+  workflow.manifest.json
+  scf/    POSCAR  POTCAR  INCAR  KPOINTS  manifest.json
+  dos/    POSCAR  POTCAR  INCAR  KPOINTS  manifest.json
+  band/   POSCAR  POTCAR  INCAR  KPOINTS  manifest.json
+```
+
+请求中的 `poscar` 相对路径以请求 JSON 所在目录为基准，不依赖命令的当前目录。每步 `id` 限于安全 ASCII 名称，Windows 大小写碰撞和保留设备名也会拒绝。`candidate_id` 用于结构来源标识，不用作输出路径。
+
+装配入口要求单个标量缩放因子、明确的 Direct/Cartesian 坐标模式、有限且非奇异的晶胞。不支持三方向缩放或未建模的尾部数据；历史 Mn3Al 的全零速度块保留，非零速度输入拒绝。不会把不支持的 POSCAR 写法静默改写成另一种结构。
+
+每步嵌入现有 `incar`、`kpoints` 请求；可选 `potential_plan` 接受人工审阅的选择结果，否则使用现有策略选择。三者的 goal 必须在本步内一致，但不同步骤可以使用不同 task。默认 XC 仍是 PBE.54；原子顺序不改变，不标准化晶胞。原子逐项索引、物种与 MAGMOM 切片记录于每步 manifest，不声称能从任意磁矩数组反推出原始位点身份。
+
+`incar_options` 只接受明确的类型化选项：`ISTART`、`ICHARG`、`LWAVE`、`LCHARG`、`NBANDS`、`ISMEAR`、`SIGMA`、`LMAXMIX`、`SOCSCALE`。它不能覆盖请求中的 ENCUT、磁矩、磁性模式或 DFT+U 设置。覆盖后重新运行完整校验。工作流第一版限制 `ISTART=0/1`、`ICHARG=0/1/2/11`，不接受未建模的重启方式。
+
+### 依赖契约与就绪状态
+
+例如能带步骤声明：
+
+```json
+"dependencies": [{"artifact": "CHGCAR", "from_step": "scf"}]
+```
+
+- 必须为 INCAR 实际需要的每个产物提供且只提供一个来源。不接受缺少来源、额外无用依赖、未知步骤和循环依赖。输入步骤可以乱序列出，输出 manifest 记录拓扑执行顺序。
+- 来源必须是不移动离子的自洽步骤，并明确设置 `LCHARG=True` 或 `LWAVE=True`。第六步不支持直接把尚未产生的弛豫后 CONTCAR 作为下游 POSCAR；需在真实弛豫后重新规划。
+- 共享产物要求相同候选编号、相同物种/原子顺序、相同物理晶胞与位置，以及相同 POTCAR 内容哈希。位置比较允许整数周期平移，不允许位点重排；不会只比较化学式或晶格。
+- 第一版保守要求 ENCUT、PREC、磁矩/自旋基底、SOC、DFT+U、LMAXMIX 等设置一致。相关壳层所需的 LMAXMIX 必须在上游足够，不能只在下游补大数值。这些是项目的输入级限制，不是所有 VASP 重启方式的普遍定律，也不足以证明实际二进制产物兼容。
+- CHGCAR 允许不同 k 点采样，例如 SCF 网格到 band 路径或更密 DOS 网格。WAVECAR 则另外要求显式相同 NBANDS、相同 KPOINTS 和 ISYM；不把 SCF WAVECAR 自动交给不同采样的能带计算。
+- 没有前置依赖的步骤标记 `prepared`，仅表示输入已准备。有依赖的标记 `waiting_for_upstream`，每条依赖为 `pending_upstream`，产物 SHA256 为 `null`。不会写空 CHGCAR/WAVECAR 占位，也不会因为用户自行放入一个同名文件就自动解除等待。
+
+所有步骤始终为 `runtime_verified=false`。后续执行层必须检查目标 VASP、上游实际收敛及产物兼容性，记录真实文件哈希，再把产物送到下游。当前整包是可搬运的输入计划，不是已经可以无条件顺序启动的完整运行环境；没有生成 Slurm 脚本。
+
+### 扫描模板
+
+`config/workflows/` 提供五份配置：
+
+- `Mn3Al.scf-dos-band.json`：18×18×18 SCF、24×24×24 DOS 和历史六段能带路径，仍保留 U/K 断点。DOS 网格是待收敛测试的基线，不是历史精度保证。
+- `CuMnAs.soc.json`、`SrRuO3.soc-u.json`：单步 SOC 和 SOC+U 整包。
+- `Mn3Al.mae.json`：`001/011/111` 三方向独立自洽 SOC，生成 `mae-001/mae-011/mae-111`。各方向结构、赝势、k 点和其余 INCAR 严格相同，只变化 SAXIS。
+- `CuMnAs.socscale.json`：0、0.5、1 的独立 SOCSCALE 扫描。示例故意设置 `capabilities.socscale=false`，默认拒绝生成；在确认目标 VASP 版本/补丁支持后才可开启，并用 `capabilities.evidence` 写明证据。测试中使用的虚拟能力声明不构成集群支持证据。
+
+MAE 模板要求三维 MAGMOM 在 VASP 自旋坐标中只有 z 分量，且并非全零；因此改变 SAXIS 才能明确表示统一旋转磁矩方向。SAXIS 是笛卡尔方向，不自动等同于任意晶格下的 Miller 指数。本版不自动转换一般非共线纹理，不生成磁矩约束，也不保证自洽后方向保持不变。后处理仍需核查最终磁矩方向和精度后才能比较能量；固定电荷密度/力定理 MAE 不在此模板范围内。
+
+SOCSCALE 同样只允许扫描该参数，其他输入保持不变。两类扫描在顶层 manifest 中声明比较组和方法，但 `results_available=false`，不伪造能量、MAE 或候选排序。
+
+### 写盘与可追溯性
+
+所有步骤先完成校验和源赝势读取，再在输出父目录下的独立临时目录写入完整树。发布前重新校验哈希，最后在当前 Windows 环境通过目录重命名发布；已有输出拒绝覆盖。常规写盘失败会清理本次临时目录，不改动参考算例或其他计算。进程被强制终止或断电时可能留下 `.magvasp-stage-*` 暂存目录，但不会被当成最终输入包；不承诺断电级事务。
+
+每步 manifest 记录 goal、展开后的参数、原始 POSCAR 哈希、赝势来源哈希、四文件哈希、逐原子磁矩映射和校验报告。顶层记录完整请求、配方版本、来源哈希、依赖图、执行顺序与每步 manifest 哈希，不写入尚未产生的计算结果哈希。同一请求、同一来源路径/内容和同一锁定环境可生成逐字节相同的包；没有时间戳或随机任务编号。重新编译请求需要原始结构和授权势库，完整已生成输入则可单独做完整性检查。
+
+回归测试中的赝势均为明确标注的合成文本，不包含授权数据。真实 POTCAR 仅保留在 Git 忽略的本机生成目录。这里只验证输入与依赖，不替代 ENCUT/k 点收敛测试或 VASP 实测。
 
 ## 历史审计与测试
 

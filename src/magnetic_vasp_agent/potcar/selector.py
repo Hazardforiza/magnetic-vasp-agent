@@ -109,11 +109,11 @@ def validate_plan(
     return selected
 
 
-def assemble_potcar(
+def prepare_potcar(
     plan: PotentialPlan,
     registry: PotentialRegistry,
-    output: Path,
-) -> PotcarBuildManifest:
+) -> tuple[bytes, PotcarBuildManifest]:
+    """Verify licensed sources and prepare bytes without writing to disk."""
     selected = validate_plan(plan, registry)
     root = Path(registry.root).resolve()
     payloads: list[bytes] = []
@@ -131,10 +131,7 @@ def assemble_potcar(
         payloads.append(payload)
 
     combined = b"".join(payloads)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(combined)
-
-    return PotcarBuildManifest(
+    manifest = PotcarBuildManifest(
         candidate_id=plan.candidate_id,
         family=plan.goal.xc_family,
         species_order=plan.species_order,
@@ -142,3 +139,15 @@ def assemble_potcar(
         source_sha256=[record.sha256 for record in selected],
         output_sha256=hashlib.sha256(combined).hexdigest(),
     )
+    return combined, manifest
+
+
+def assemble_potcar(
+    plan: PotentialPlan,
+    registry: PotentialRegistry,
+    output: Path,
+) -> PotcarBuildManifest:
+    combined, manifest = prepare_potcar(plan, registry)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(combined)
+    return manifest

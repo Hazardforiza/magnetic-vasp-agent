@@ -34,6 +34,7 @@ from magnetic_vasp_agent.potcar import (
     select_by_policy,
     write_registry,
 )
+from magnetic_vasp_agent.workflow_cli import workflow_app
 
 app = typer.Typer(no_args_is_help=True, help="Local magnetic VASP control plane.")
 potcar_app = typer.Typer(no_args_is_help=True, help="Manage licensed POTCAR data.")
@@ -45,6 +46,7 @@ app.add_typer(potcar_app, name="potcar")
 app.add_typer(structure_app, name="structure")
 app.add_typer(incar_app, name="incar")
 app.add_typer(kpoints_app, name="kpoints")
+app.add_typer(workflow_app, name="workflow")
 
 
 @app.command()
