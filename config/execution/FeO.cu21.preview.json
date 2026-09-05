@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "node": "cu21",
+  "step_id": "candidate-01",
+  "run_id": "FeO-smoke-review-01",
+  "mpi_ranks": 1,
+  "cpu_ids": null
+}

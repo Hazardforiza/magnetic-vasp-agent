@@ -1,6 +1,6 @@
 # Magnetic VASP Agent
 
-面向磁性材料 VASP 计算的本地控制程序。最终在本机理解计算目标、生成经过校验的输入文件，再通过 SSH 向 Slurm 集群提交任务。大模型 API 和 Agent 服务运行在本地，集群只需要 SSH、Slurm 与 VASP。
+面向磁性材料 VASP 计算的本地控制程序。最终在本机理解计算目标、生成经过校验的输入文件，再通过 SSH 进入集群并在获批的计算节点上直接运行 MPI。大模型 API 和 Agent 服务运行在本地，集群只需要 SSH、Intel MPI 与 VASP；本项目不假设或调用 Slurm。
 
 ## 当前进度
 
@@ -212,7 +212,7 @@ uv run --frozen magvasp workflow build `
 uv run --frozen magvasp workflow inspect var\demo-workflow\Mn3Al
 ```
 
-`validate` 在内存中准备输入并核实所选 POTCAR 源哈希，不写输出。`build` 是本地 dry-run 装配：会写输入文件，但绝不执行 VASP、SSH、Slurm 或 LLM。`inspect` 检查已经生成的全部输入及每步 manifest 哈希；它不是科学有效性复核，也不能抵御输入和 manifest 被同时重写。命令成功退出 0；请求、依赖、完整性或文件错误退出 2。
+`validate` 在内存中准备输入并核实所选 POTCAR 源哈希，不写输出。`build` 是本地 dry-run 装配：会写输入文件，但绝不执行 VASP、SSH、MPI、Slurm 或 LLM。`inspect` 检查已经生成的全部输入及每步 manifest 哈希；它不是科学有效性复核，也不能抵御输入和 manifest 被同时重写。命令成功退出 0；请求、依赖、完整性或文件错误退出 2。
 
 输出布局如下，SCF 分别向 DOS 与 band 提供 CHGCAR，而不是 DOS 向 band 传递：
 
@@ -324,6 +324,35 @@ uv run --frozen magvasp workflow inspect var\demo-mcif\FeO
 - 位点合并容差为 1e-5 Å；磁矩冲突、共线判断和坐标往返使用 1e-6 μB 绝对残差。输入大小上限 5 MB，最多 384 个合成磁操作、4096 个展开位点。数值容差检查不代替材料稳定性、磁基态或几何合理性筛选。
 - 每步 manifest 保存原 mCIF 哈希、类型化候选、逐原子映射、磁矩转换方式和实际展开后的 INCAR 请求。原有 CHGCAR/WAVECAR 依赖契约继续适用，运行状态仍是 `runtime_verified=false`。
 
+## 第八步：SSH 与直接 MPI 执行准备（默认禁用）
+
+第八步适配本组的真实集群约束，不使用 Slurm：本机 Agent 通过 SSH 进入 `zyy@192.168.164.203`，该入口 `mu01` 只作为跳板，绝不在其上启动 VASP。允许的计算节点严格限定为 `cu21`、`cu22`、`cu23`、`cu41`、`cu42`、`cu43`、`cu48`、`cu49`、`cu50`。默认配置见 `config/execution/cluster.json`，其中 `execution_enabled` 永远为 `false`。
+
+本步只实现三项确定性能力：
+
+- `execution probe` 生成或执行固定的只读预检，核实主机、用户、CPU 拓扑、进程、负载、内存、VASP 模块、Intel MPI 和三个 VASP 可执行文件。预检不上传文件、不发送信号、不启动 MPI；`--connect` 也只有这一组固定命令。
+- `execution plan` 重新检查工作流包的四个输入、逐项哈希、物种/赝势顺序、INCAR/KPOINTS/goal 和依赖状态，输出候选 `mpirun` 命令、环境变量、CPU 绑定和阻塞原因。它不读取 POTCAR 内容，也不把 `CHGCAR` 文件名当作已验证产物。
+- `execution simulate` 只运行内置的极小 Python 子进程，测试完成、失败、超时、取消、日志和拒绝覆盖；不接受任意命令，不接触 VASP 或 SSH。
+
+命令示例：
+
+```powershell
+uv run --frozen magvasp execution probe `
+  --profile config\execution\cluster.json --node cu21
+
+uv run --frozen magvasp execution plan `
+  --bundle var\step7\FeO-generated `
+  --profile config\execution\cluster.json `
+  --request config\execution\FeO.cu21.preview.json
+
+uv run --frozen magvasp execution simulate `
+  --output var\execution-sim\complete --scenario complete
+```
+
+即使预检显示空闲，当前计划仍会阻塞：空闲快照不是资源分配，`PSR` 也不是 CPU 预留；没有验证 Intel MPI 的单节点启动和绑定行为前，不生成可执行提交脚本。cu21 当前已有其他用户的计算占用全部物理核，因此不能作为本轮测试目标，且不会被本程序干预。
+
+第八步的 `ResourceAssessment.ready_to_run` 和执行报告的 `ready_to_run` 固定为 `false`。后续真正启用需要先由用户确认本组资源使用规则和空闲窗口，再用一个无科学结果的最小 MPI smoke test 验证单节点隔离、CPU 绑定、退出码和日志；这不是由 LLM 自主决定的步骤。LLM 可以提出执行计划和解释异常，但不能生成任意 shell、绕过节点白名单、选择 mu01、取消他人进程或自动重试。
+
 ## 历史审计与测试
 
 按相邻 POSCAR 和所选势检查全部原始 INCAR：
@@ -346,4 +375,4 @@ uv run --frozen pytest
 - POTCAR 内容不会发送给大模型或提交到 Git。
 - 赝势选择只能引用注册表中存在的势，拼接前校验源文件哈希。
 - `var/` 保存本机注册表、临时文件及报告，不进入 Git。
-- 后续集群访问使用指定 SSH 配置及类型化 Slurm 操作，不执行模型任意拼接的 shell 命令。
+- 后续集群访问使用 `execution` 中的固定 SSH/直接 MPI 计划，不执行模型任意拼接的 shell 命令；本项目不使用 Slurm。

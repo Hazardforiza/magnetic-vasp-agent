@@ -9,6 +9,7 @@ import pydantic
 import typer
 
 from magnetic_vasp_agent import __version__
+from magnetic_vasp_agent.execution_cli import execution_app
 from magnetic_vasp_agent.incar import (
     read_incar,
     render_incar,
@@ -49,6 +50,7 @@ app.add_typer(incar_app, name="incar")
 app.add_typer(kpoints_app, name="kpoints")
 app.add_typer(workflow_app, name="workflow")
 app.add_typer(mcif_app, name="mcif")
+app.add_typer(execution_app, name="execution")
 
 
 @app.command()

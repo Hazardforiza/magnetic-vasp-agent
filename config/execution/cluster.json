@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "transport": "ssh_direct_mpi",
+  "gateway": "192.168.164.203",
+  "gateway_hostname": "mu01",
+  "user": "zyy",
+  "port": 22,
+  "vasp_module": "vasp/5.4.4-intel",
+  "execution_enabled": false,
+  "remote_root": null
+}
