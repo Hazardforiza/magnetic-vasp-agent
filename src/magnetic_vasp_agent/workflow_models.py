@@ -15,6 +15,7 @@ from magnetic_vasp_agent.incar_models import (
     Nonnegative,
 )
 from magnetic_vasp_agent.kpoints_models import KpointsRecipeRequest, StrictModel
+from magnetic_vasp_agent.mcif_models import McifIncarRequest
 from magnetic_vasp_agent.models import PotentialPlan
 
 
@@ -56,8 +57,9 @@ class ExecutionCapabilities(StrictModel):
 class CalculationStep(StrictModel):
     id: str
     candidate_id: str = Field(min_length=1)
-    poscar: str = Field(min_length=1)
-    incar: IncarRecipeRequest
+    poscar: str | None = Field(default=None, min_length=1)
+    mcif: str | None = Field(default=None, min_length=1)
+    incar: IncarRecipeRequest | McifIncarRequest
     kpoints: KpointsRecipeRequest
     potential_plan: PotentialPlan | None = None
     incar_options: IncarSpec = Field(default_factory=IncarSpec)
@@ -67,6 +69,12 @@ class CalculationStep(StrictModel):
 
     @model_validator(mode="after")
     def consistent_step(self) -> "CalculationStep":
+        if (self.poscar is None) == (self.mcif is None):
+            raise ValueError("provide exactly one of poscar or mcif")
+        if (self.mcif is not None) != isinstance(self.incar, McifIncarRequest):
+            raise ValueError(
+                "mCIF input requires moment_source=mcif; POSCAR input requires explicit magmom"
+            )
         if self.incar.goal != self.kpoints.goal:
             raise ValueError("step INCAR and KPOINTS goals must match")
         if self.potential_plan is not None:
@@ -104,6 +112,10 @@ class ParameterScan(StrictModel):
 
     @model_validator(mode="after")
     def consistent_scan(self) -> "ParameterScan":
+        if self.base.mcif is not None:
+            raise ValueError(
+                "mCIF scan templates are not supported: changing SAXIS alone would preserve, not rotate, the physical moments"
+            )
         variants = self.axes if self.kind == "mae" else self.values
         if len(variants) < 2:
             raise ValueError("a scan requires at least two variants")

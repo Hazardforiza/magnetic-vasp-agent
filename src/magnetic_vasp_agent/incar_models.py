@@ -158,16 +158,21 @@ class HubbardSpec(BaseModel):
         return value
 
 
-class IncarRecipeRequest(BaseModel):
-    """MAGMOM is already in POSCAR atom order and VASP's SAXIS spin basis."""
+class IncarRecipeSettings(BaseModel):
+    """Scientific settings shared by explicit-moment and mCIF requests."""
 
     model_config = ConfigDict(extra="forbid")
     goal: CalculationGoal
-    magmom: RealList
     encut: Positive
     saxis: Axis = Field(default_factory=lambda: [0.0, 0.0, 1.0])
     ediff: Positive = 1e-7
     hubbard: dict[str, HubbardSpec] = Field(default_factory=dict)
+
+
+class IncarRecipeRequest(IncarRecipeSettings):
+    """MAGMOM is already in POSCAR atom order and VASP's SAXIS spin basis."""
+
+    magmom: RealList
 
 
 class IncarBuild(BaseModel):

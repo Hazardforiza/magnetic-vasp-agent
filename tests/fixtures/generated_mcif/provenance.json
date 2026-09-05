@@ -1,0 +1,16 @@
+{
+  "kind": "real_generated_candidates_not_experimental_structures",
+  "source": "User-provided mcif/ and crystalformer_run_20260905/delivery_3_FeO_mcifs/manifest.json",
+  "generator": "magnetic CrystalFormer",
+  "checkpoint_sha256": "45abbb328d8e0b11d06a634d2abc0d3e44d86809027829f24e46654c1f5b6c1e",
+  "seed": 20260907,
+  "fixed_bns": "2.7",
+  "fixed_orbits": [1, 8],
+  "fixed_elements": ["Fe", "O"],
+  "note": "Lattice and Fe moment sampled; positions fixed by orbit topology. O moment projected to the symmetry-required zero subspace upstream. No DFT validation.",
+  "files": [
+    {"file": "candidate_01_FeO_BNS2_7.mcif", "source_index": 826, "source_sha256": "5ea0424564715d6b8d72a06e32cadd38972b5fa928cc069d96f52727599d2238", "fe_moment_norm": 1.4177741788713274, "fe_cartesian_moment": [-1.3999578952789307, 0.21905308961868283, -0.04709555208683014]},
+    {"file": "candidate_02_FeO_BNS2_7.mcif", "source_index": 690, "source_sha256": "2a8dfc5637ace70dfd305147bffc4e3a1a6e0eb83db346cda66aee1cdcd820a2", "fe_moment_norm": 1.6664989470893583, "fe_cartesian_moment": [-1.6629300117492676, 0.025992736220359802, -0.10586543381214142]},
+    {"file": "candidate_03_FeO_BNS2_7.mcif", "source_index": 824, "source_sha256": "0fa2c2a334d2bfea2d9aaac07670c4a8eaf65e4d4caae0dd0b4bdda4ec68ea06", "fe_moment_norm": 1.8550802500682388, "fe_cartesian_moment": [-1.8516122102737427, 0.019300043582916256, -0.11172731965780258]}
+  ]
+}

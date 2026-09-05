@@ -24,6 +24,7 @@ from magnetic_vasp_agent.incar_recipes import build_incar
 from magnetic_vasp_agent.kpoints import parse_kpoints, render_kpoints
 from magnetic_vasp_agent.kpoints_models import KpointsSpec
 from magnetic_vasp_agent.kpoints_recipes import build_kpoints
+from magnetic_vasp_agent.mcif import map_moments, parse_mcif
 from magnetic_vasp_agent.models import (
     CandidateComposition,
     PotentialPolicy,
@@ -172,9 +173,17 @@ def _compile_step(
     policy: PotentialPolicy,
     base_dir: Path,
 ) -> PreparedStep:
-    source = (base_dir / step.poscar).resolve()
+    source = (base_dir / (step.poscar or step.mcif)).resolve()
     source_bytes = source.read_bytes()
-    structure = _read_structure(source_bytes)
+    candidate = None
+    moment_mapping = None
+    incar_request = step.incar
+    if step.mcif is not None:
+        candidate = parse_mcif(source_bytes, step.candidate_id)
+        structure = candidate.structure
+        incar_request, moment_mapping = map_moments(candidate, step.incar)
+    else:
+        structure = _read_structure(source_bytes)
     _cell(structure)
     if structure.velocities is not None and any(
         x != 0 for row in structure.velocities for x in row
@@ -188,7 +197,7 @@ def _compile_step(
         registry,
         policy,
     )
-    incar_build = build_incar(structure, step.incar, plan, registry)
+    incar_build = build_incar(structure, incar_request, plan, registry)
     data = incar_build.spec.model_dump(exclude_none=True)
     data.update(step.incar_options.model_dump(exclude_unset=True))
     incar = IncarSpec.model_validate(data)
@@ -269,6 +278,17 @@ def _compile_step(
         "atom_mapping": atom_mapping,
         "validation": kbuild.validation.model_dump(mode="json", exclude_none=True),
     }
+    if candidate is not None:
+        del manifest["poscar_source"]
+        manifest["mcif_source"] = {"path": step.mcif, "sha256": digest(source_bytes)}
+        manifest["candidate"] = candidate.model_dump(mode="json")
+        manifest["moment_mapping"] = moment_mapping.model_dump(mode="json")
+        manifest["resolved_incar_request"] = incar_request.model_dump(mode="json")
+        for atom, site in zip(manifest["atom_mapping"], candidate.sites, strict=True):
+            atom["mcif_origins"] = [
+                origin.model_dump(mode="json") for origin in site.origins
+            ]
+            atom["moment_cartesian"] = site.moment_cartesian
     return PreparedStep(step, structure, incar, kbuild.spec, payloads, manifest)
 
 
@@ -422,7 +442,7 @@ def prepare_workflow(
         "workflow_id": workflow.workflow_id,
         "mode": "local_dry_run",
         "generator_version": __version__,
-        "recipe_version": "workflow/1",
+        "recipe_version": "workflow/2",
         "validation": {
             "valid": True,
             "scope": "inputs_and_declared_dependencies",
