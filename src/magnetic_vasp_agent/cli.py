@@ -9,6 +9,7 @@ import pydantic
 import typer
 
 from magnetic_vasp_agent import __version__
+from magnetic_vasp_agent.cli_io import Utf8TyperGroup
 from magnetic_vasp_agent.execution_cli import execution_app
 from magnetic_vasp_agent.incar import (
     read_incar,
@@ -19,6 +20,7 @@ from magnetic_vasp_agent.incar import (
 from magnetic_vasp_agent.incar_models import IncarRecipeRequest
 from magnetic_vasp_agent.incar_recipes import build_incar
 from magnetic_vasp_agent.kpoints_cli import kpoints_app
+from magnetic_vasp_agent.knowledge_cli import knowledge_app
 from magnetic_vasp_agent.mcif_cli import mcif_app
 from magnetic_vasp_agent.models import (
     CalculationGoal,
@@ -38,7 +40,11 @@ from magnetic_vasp_agent.potcar import (
 )
 from magnetic_vasp_agent.workflow_cli import workflow_app
 
-app = typer.Typer(no_args_is_help=True, help="Local magnetic VASP control plane.")
+app = typer.Typer(
+    cls=Utf8TyperGroup,
+    no_args_is_help=True,
+    help="Local magnetic VASP control plane.",
+)
 potcar_app = typer.Typer(no_args_is_help=True, help="Manage licensed POTCAR data.")
 structure_app = typer.Typer(no_args_is_help=True, help="Inspect crystal structures.")
 incar_app = typer.Typer(
@@ -51,6 +57,7 @@ app.add_typer(kpoints_app, name="kpoints")
 app.add_typer(workflow_app, name="workflow")
 app.add_typer(mcif_app, name="mcif")
 app.add_typer(execution_app, name="execution")
+app.add_typer(knowledge_app, name="knowledge")
 
 
 @app.command()

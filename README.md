@@ -1,10 +1,60 @@
 # Magnetic VASP Agent
 
-面向磁性材料 VASP 计算的本地控制程序。最终在本机理解计算目标、生成经过校验的输入文件，再通过 SSH 进入集群并在获批的计算节点上直接运行 MPI。大模型 API 和 Agent 服务运行在本地，集群只需要 SSH、Intel MPI 与 VASP；本项目不假设或调用 Slurm。
+面向磁性材料 VASP 计算的本地控制程序。它不是把只能从 Materials Project 读取结构的 VASPilot 原样搬到集群，而是在本机增加一个可审查、可校验、可追溯的 Agent 控制层：本机理解计算目标，生成经过校验的 POSCAR/POTCAR/INCAR/KPOINTS，再通过 SSH 进入集群并在获批的计算节点上直接运行 MPI。大模型 API 和 Agent 服务运行在本地，集群只需要 SSH、Intel MPI 与 VASP；本项目不假设或调用 Slurm。
+
+本项目的基本边界是：LLM 负责把用户目标转成候选方案、解释校验错误和辅助规划；确定性程序负责解析结构、选择并拼接本地授权 POTCAR、生成输入文件、校验跨文件一致性、限制远程节点和记录哈希。LLM 不能直接拼接任意 shell，也不能绕过这些校验自行提交任务。
 
 ## 当前进度
 
-已实现本地授权赝势库扫描、POSCAR 类型模型、赝势选择与拼接、类型化 INCAR/KPOINTS、第六步工作流装配，以及第七步的 mCIF 磁性位点展开、磁矩坐标转换和候选结构映射。目前尚未接入大模型或集群提交，也没有执行真实 VASP 计算。
+已完成第 1–9 步的本地确定性内核。RAG 方向已完成第 10.1–10.6 步：知识治理与 20 题评测集、9 个 VASP Wiki 页面/58 个可追溯 chunk、74 文档 BM25 基线、本地 Qdrant 混合检索、离线多语言 MiniLM embedding，以及只允许 `draft_only` 的类型化证据包。当前尚未接入 LLM API，证据包也不能自动修改 VASP 输入或触发远程执行。
+
+当前分支为 `codex/bootstrap`，HEAD 仍为 `5037181 feat: add controlled workflow transfer`，第 10.1–10.6 步还在工作区等待审查和提交。最近一次全量测试为 **457 passed, 1 skipped**；`git diff --check` 通过。本机当前环境没有安装 Ruff，因此不能把本轮 Ruff 检查写成已通过。当前仍是“本地生成与审查阶段”：尚未连接或上传到真实集群，尚未启动/取消/重试 VASP，也尚未实现 VASP 输出后处理。
+
+`mcif/` 和 `vasp笔记/` 是用户原始资料目录，目前保持未跟踪状态，不属于本轮功能提交，也不应被自动修改或提交。
+
+## 开发里程碑与完整变更历史
+
+下面按实际 Git 提交记录列出此前已经完成的改动。第 1–3 步是功能上的分工，其中第 1、2 步在同一组早期 POTCAR/结构代码中逐步落地；不能简单把每一个逻辑步骤等同于一个提交。
+
+| 逻辑步骤 | 提交 | 主要文件/目录 | 已完成内容 |
+| --- | --- | --- | --- |
+| 1. POTCAR 基础控制 | `54a0b14` | `src/magnetic_vasp_agent/potcar/registry.py`、`potcar/selector.py`、`models.py`、`config/potential_policy.json`、`tests/test_potcar.py` | 建立本地赝势注册表；扫描 PBE.54；保存来源路径、元数据和 SHA256；按元素和计算目标生成可审查的 `PotentialPlan`；拼接前校验来源；增加 CLI、测试和依赖锁定。 |
+| 2. POSCAR 结构模型 | `cbc8450` | `src/magnetic_vasp_agent/poscar.py`、`models.py`、`tests/fixtures/*/POSCAR`、`tests/test_structure.py` | 解析 VASP 5 POSCAR；保留晶格、物种、数量、原子顺序和坐标模式；建立结构与物种顺序的类型模型；让 POTCAR 选择以 POSCAR 物种顺序为准；加入 Mn3Al、CuMnAs、SrRuO3 fixture。 |
+| 3. 选择策略接入 | `54a0b14` + `cbc8450` | `potcar/selector.py`、`config/potential_policy.json`、`cli.py`、`tests/test_potcar.py` | 将元素/任务/磁性模式/XC 策略映射为可解释的赝势选择；支持 POSCAR 驱动选择和人工审阅后的计划；拒绝注册表之外的势；校验物种顺序、候选编号和源文件哈希。它是规则基线，不是统计意义上的正确率。 |
+| 4. 类型化 INCAR | `29d5429` | `incar_models.py`、`incar.py`、`incar_recipes.py`、`scripts/audit_incar_references.py`、`config/incar_requests/`、`tests/fixtures/historical_incars.json` | 建立类型化参数、解析器、诊断和磁性计算预设；支持历史格式、续行、缩写、D 指数及旧布尔拼写；校验 MAGMOM、ENCUT、ISPIN、SOC、DFT+U、重启依赖；完成 23 份历史 INCAR 固化、审计和往返测试。 |
+| 5. 类型化 KPOINTS | `2bd0e66` | `kpoints_models.py`、`kpoints.py`、`kpoints_recipes.py`、`kpoints_cli.py`、`scripts/audit_kpoints_references.py`、`config/kpoints_requests/`、`tests/fixtures/historical_kpoints.json` | 支持 Gamma、Monkhorst–Pack、Line-mode、显式点列表和四面体；固化 14 份 Gamma、9 份 Line-mode 历史样本及合成格式 fixture；按 task 与 INCAR 交叉校验；支持倒空间 spacing 生成网格和保留断裂高对称路径。 |
+| 6. Workflow/计算装配 | `c86f711` | `workflow_models.py`、`workflow.py`、`workflow_cli.py`、`config/workflows/`、`tests/test_workflow.py` | 把四类输入组装成 `CalculationStep`/`Workflow`；检查物种、晶胞、POTCAR、goal、ENCUT、磁性参数和依赖；连接 SCF→DOS/Band 的 CHGCAR；加入 MAE 多 SAXIS 扫描和 SOCSCALE 扫描；以 dry-run 方式生成带哈希 manifest 的目录树，拒绝覆盖。 |
+| 7. mCIF 磁性候选入口 | `3b0c8be` | `mcif_models.py`、`mcif.py`、`mcif_cli.py`、`config/workflows/FeO.generated.mcif.json`、`tests/fixtures/generated_mcif/`、`tests/test_mcif.py` | 解析生成模型输出的 mCIF；展开磁空间操作和中心操作；处理晶轴磁矩到笛卡尔/ VASP 自旋坐标的转换；按源位点建立逐原子映射；保持物种和原子顺序；把候选编号、BNS 声明、Wyckoff 来源和 MAGMOM 记录进 manifest。 |
+| 8. SSH/直接 MPI 执行准备 | `ee72ab8` | `execution.py`、`execution_models.py`、`execution_probe.py`、`execution_simulator.py`、`execution_cli.py`、`config/execution/cluster.json`、`tests/test_execution.py` | 针对无 Slurm 集群建立固定入口、节点白名单、只读预检、CPU 拓扑检查、MPI 命令计划和本地生命周期模拟；默认禁用真实执行；不选择 `mu01`，不接受任意命令，不干预他人进程。 |
+| 9. 受控 SSH/SFTP 传输 | `5037181` | `transfer.py`、`transfer_models.py`、`execution_cli.py`、`config/execution/FeO.cu21.transfer.json`、`tests/test_execution.py` | 为已生成 workflow 绑定远端专用目录；只允许传输规定的输入文件和 manifest；拒绝覆盖、符号链接和不安全路径；上传后用 SHA256 逐项核验；默认只生成计划，`remote_root` 未确认前不会连接集群。 |
+| 10.1 RAG 知识治理与清单 | 工作区（待提交） | `knowledge/models.py`、`knowledge/inventory.py`、`knowledge_cli.py`、`config/knowledge/sources.json`、`docs/knowledge/`、`tests/fixtures/knowledge/`、`tests/test_knowledge.py` | 将官方资料、组内策略、已验证案例、运行经验和个人笔记分级；只读登记本地文件哈希和外部引用；排除 POTCAR/运行产物；识别重复内容；建立 20 个带预期事实、禁止结论和人工审批标记的 RAG 评测问题。 |
+| 10.2 VASP Wiki 抓取与切块 | 工作区（待提交） | `knowledge/wiki.py`、`knowledge/wiki_models.py`、`knowledge_cli.py`、`docs/knowledge/wiki_capture.md`、`tests/test_knowledge.py` | 固定域名和 MediaWiki API 抓取；记录 page/revision/快照哈希；按章节和块级语义生成 JSONL；拒绝任意 URL、跨域重定向、超大响应和覆盖；运行时正文只保存在 Git 忽略的 `var/knowledge/`。 |
+| 10.3 BM25 检索基线 | 工作区（待提交） | `knowledge/retrieval.py`、`retrieval_models.py`、`knowledge_cli.py`、`tests/test_knowledge.py` | 从受校验 Wiki chunk 和批准的 Markdown 构建 74 文档语料；支持来源、任务、磁性模式过滤和 20 题离线评测。 |
+| 10.4 Qdrant 混合检索 | 工作区（待提交） | `knowledge/retrieval.py`、`retrieval_models.py`、`pyproject.toml`、`uv.lock` | 使用本地确定性 hash embedding 建立 Qdrant 工程基线，并以 RRF 融合 BM25；保留引用 provenance 和索引完整性检查。 |
+| 10.5 RAG 证据契约 | 工作区（待提交） | `knowledge/retrieval.py`、`retrieval_models.py`、`knowledge_cli.py`、`tests/test_knowledge.py` | 生成稳定引用编号、缺失来源、未验证证据和人工审核风险；输出只能用于回答草稿，不能驱动输入修改或集群执行。 |
+| 10.6 本地多语言 embedding | 工作区（待提交） | `knowledge/embedding.py`、`knowledge/retrieval.py`、`knowledge_cli.py`、`tests/test_knowledge.py`、`docs/knowledge/embedding_model.md` | 固定 Apache-2.0 MiniLM ONNX revision；注册并校验模型文件清单、哈希和运行时；支持离线 semantic Qdrant 索引；在同一 20 题集上与 BM25/hash 基线比较。 |
+
+上述提交还共同包含 `.gitignore`/`.gitattributes`、`pyproject.toml`、`uv.lock`、CLI 入口和回归测试。`POTCAR` 内容不进入 Git；测试中的赝势是明确标注的合成文本，不含授权数据。
+
+### 提交审查命令
+
+在项目根目录执行以下命令，可以按提交逐项复核，不会修改工作区：
+
+```powershell
+git status --short
+git log --oneline --decorate -10
+git show --stat 54a0b14
+git show --stat cbc8450
+git show --stat 29d5429
+git show --stat 2bd0e66
+git show --stat c86f711
+git show --stat 3b0c8be
+git show --stat ee72ab8
+git show --stat 5037181
+uv run --frozen pytest
+```
+
+在 HEAD `5037181` 的基线状态下，只有两个用户原始资料目录未跟踪：`mcif/`、`vasp笔记/`。完成第 10.1 步后，工作区还应出现本表标记为“待提交”的 knowledge 源码、配置、文档、fixture、测试和 README/CLI 修改；这些文件应在审查后作为独立里程碑提交，两个原始资料目录仍不纳入版本控制。
 
 ## 本地环境
 
@@ -369,6 +419,104 @@ uv run --frozen magvasp execution transfer `
 
 只有显式加入 `--connect` 才会执行受控传输；这不是 VASP 提交，也不会执行 MPI。由于当前配置的 `remote_root` 为 `null`，命令会安全地拒绝，直到你确认远程专用目录后再另行修改配置。第九步仍不会提供 `launch`、`cancel` 或 `retry` 命令。
 
+## 第 10.1 步：RAG 知识治理与来源清单
+
+这一阶段先建立专业知识库的证据边界，不安装向量数据库，也不调用 LLM。`knowledge/models.py` 定义五类来源：`official`、`team_policy`、`validated_case`、`runtime_experience`、`personal_note`；来源身份和 `validated` 状态分开记录。默认权威顺序为官方资料、组内策略、已验证案例、确认过的运行经验和个人笔记，确定性代码规则始终在 RAG 之外优先执行。
+
+机器可读声明位于 `config/knowledge/sources.json`，目前包含 17 个来源：9 个 VASP Wiki 页面只登记为未抓取的 `reference_only`；原始 Word/PDF 笔记保持 `local_only`；集群策略与机器配置属于已确认的 `team_policy`；历史 INCAR/KPOINTS 仅作为未科学验证的解析样本。当前没有案例被冒充为 `validated_case`。
+
+```powershell
+uv run --frozen magvasp knowledge inventory `
+  --catalog config\knowledge\sources.json `
+  --output var\knowledge\source_inventory.json
+```
+
+`knowledge inventory` 只读取声明的本地文件并计算路径、大小和 SHA256，不解析正文、不联网、不生成 embedding，也不上传任何内容。它拒绝路径逃逸、符号链接、超大文件和覆盖已有报告；目录中出现 POTCAR 或常见 VASP 原始运行产物时，在读取内容前排除并报告。该命令对外部 URL 只记录声明哈希；实际抓取状态由第 10.2 步的独立 manifest 记录。
+
+2026-09-08 的本机只读盘点在加入集群手册脱敏审查后识别到 22 个本地文档（44,122,139 字节）、9 个官方引用、0 个缺失来源和 1 组重复 PDF。用户提供的 `server_maintenance.html` 含明文凭据、管理员命令、大量历史 Slurm 配置且没有 VASP 内容，因此原文未复制或登记；只有去除敏感值和可执行命令后的差异报告 `docs/knowledge/cluster_manual_sanitized.md` 以 `personal_note/validated=false` 接入。完整治理规则和来源说明见 `docs/knowledge/governance.md` 与 `docs/knowledge/source_inventory.md`。
+
+`tests/fixtures/knowledge/rag_evaluation_cases.json` 提供首批 20 个基线问题，每题记录预期事实、禁止结论、所需来源类型、任务/磁性模式和是否需要人工审批。它们用于比较切块、BM25、向量检索和 reranker；评测指标来自实际命中文档，不伪造语义正确率。
+
+## 第 10.2 步：VASP Wiki 受控抓取与切块
+
+`knowledge capture-wiki` 只读取来源目录中预先登记的 `official/external_url` 项目，不接受命令行任意 URL。页面必须使用 HTTPS 和 `vasp.at`/`www.vasp.at` 固定域名，再由程序转换为固定的 MediaWiki API 请求。跨域重定向、凭据、自定义端口、非标准路径、查询参数、超过 5 MiB 的响应和已有输出目录都会被拒绝。
+
+```powershell
+uv run --frozen magvasp knowledge capture-wiki `
+  --catalog config\knowledge\sources.json `
+  --output var\knowledge\vasp-wiki-20260908-r1
+```
+
+每个页面保存原始 API JSON 和抽取后的 `chunks.jsonl`；顶层 manifest 记录 source URL、API URL、page ID、revision ID、抓取时间、文件大小、SHA256 和 chunk 数。每个 chunk 继续保存章节路径、任务/磁性标签、来源权威、正文哈希和原始快照哈希。脚本、样式和 MediaWiki 编辑控件不会进入正文。所有页面都成功后才发布目录，失败不会留下被误认成完整 capture 的输出。
+
+`knowledge verify-wiki` 会在以后使用 capture 前重新检查目录范围、catalog 哈希、原始 API 响应、page/revision、chunk schema/顺序/来源，以及所有文件和正文 SHA256；额外文件、符号链接或任何篡改都会使检查失败。
+
+2026-09-08 的实际抓取包含 MAGMOM、LNONCOLLINEAR、LSORBIT、ICHARG、LDAU、LMAXMIX、KPOINTS、ISMEAR 和 POTCAR 共 9 页、58 个 chunk。全部文件哈希复核通过，最大 chunk 为 1773 字符，ID 无重复。抓取的是页面当前 revision，并不自动证明适用于集群上的 VASP 5.4.4；因此 chunk 仍标记 `source_validated=false`。详细 revision 和限制见 `docs/knowledge/wiki_capture.md`。
+
+运行时快照位于 `var/knowledge/vasp-wiki-20260908-r1/`，BM25 与 Qdrant 索引位于 `var/knowledge/`，均被 Git 忽略；公开 POTCAR Wiki 页面只提供使用指南，授权 POTCAR 数据仍完全排除。网页文字只作为不可信证据数据，不能成为 Agent 工具指令。当前尚未接入 LLM 问答。
+
+## 已执行与未执行的审查边界
+
+| 状态 | 内容 | 说明 |
+| --- | --- | --- |
+| 已执行 | 本地代码开发、类型模型、解析器、规则选择器、跨文件校验和回归测试 | 已在本机完成；不代表真实 VASP 科学结果正确。 |
+| 已执行 | 23 份历史 INCAR 的解析/审计，以及 23 份历史 KPOINTS 的解析/往返检查 | 只读取参考算例并写本地审计报告；不修改原始算例。 |
+| 已执行 | 本地 POTCAR 目录扫描和源文件哈希登记 | 注册表/生成的授权 POTCAR 位于 Git 忽略的 `var/`，不上传给 LLM。 |
+| 已执行 | 用户提供的三个 mCIF fixture 接入与本地 dry-run workflow 生成 | 仅生成输入文件和 manifest，没有启动计算。 |
+| 已执行 | 本地固定 Python 生命周期模拟、SSH 命令预览、SFTP 传输计划生成 | 只验证控制逻辑和安全边界。 |
+| 已执行 | 阅读 `vasp笔记/` 中的 Word/PDF 资料，并整理为 `docs/vasp_notes_knowledge.md` | 资料整理文件已纳入第八步提交；原始笔记目录仍保持用户资料状态。 |
+| 已执行 | 第 10.1 步知识来源声明、只读哈希盘点、重复检测和 20 题 RAG 评测基线 | 只处理来源治理与元数据；没有解析正文、向量化或调用模型。 |
+| 已执行 | 第 10.2 步固定域名抓取 9 个 VASP Wiki revision 并生成 58 个可追溯 chunk | 正文只在 Git 忽略的本地 capture 中；尚未核验所有页面对 VASP 5.4.4 的适用性。 |
+| 未执行 | 连接 `192.168.164.203`、创建远端目录、上传 workflow | 本机 OpenSSH 连接此前未打通，且 `remote_root` 尚未由用户确认。 |
+| 未执行 | 在 `cu21`–`cu50` 白名单节点运行 MPI smoke test | 没有验证 Intel MPI 的单节点隔离、绑定和实际 VASP 可执行文件。 |
+| 未执行 | 启动、监控、取消、重试真实 VASP | 当前没有真实 `launch`/`cancel`/`retry` 实现；也没有触碰 `cu21` 上已有计算。 |
+| 未执行 | 解析 `OUTCAR`/`vasprun.xml`/DOS/局域磁矩并比较磁序 | VASP 后处理模块尚未开发。 |
+| 未执行 | 接入 CrewAI、MCP、LLM API | 当前是可被 Agent 调用的确定性内核，不是已经运行的多智能体系统。 |
+
+## 集群真实约束
+
+集群的入口是 `zyy@192.168.164.203`（默认 SSH 端口 22），进入后对应 `mu01`。`mu01` 只能作为跳板，禁止在其上运行 VASP、`mpirun` 或其他计算任务。允许本组使用的节点只有：
+
+```text
+cu21 cu22 cu23 cu41 cu42 cu43 cu48 cu49 cu50
+```
+
+项目不使用 Slurm，目标运行方式是通过 SSH 到获批计算节点后直接使用 Intel MPI 启动 VASP。节点白名单是硬约束，不因 LLM 建议、负载快照或用户输入中的其他主机名而放宽。当前已知 `cu21` 正被其他用户占用全部物理核心，因此不能测试、不能发送信号、不能上传或修改其正在运行的目录。
+
+需要特别区分三件事：
+
+1. 从 `mu01` 看到某节点“空闲”只是一时的只读快照，不等于资源已经分配给本组。
+2. CPU 拓扑和 `PSR` 信息只能用于预检，不能证明 `mpirun` 已获得独占核心。
+3. 真实提交前必须由用户确认组内资源使用规则和空闲窗口，并先用无科学结果的最小 MPI smoke test 验证单节点隔离、绑定、退出码和日志。
+
+程序配置中的 `execution_enabled` 默认是 `false`，`remote_root` 当前为 `null`。在用户确认远端专用目录（例如 `/home/zyy/magvasp/runs`）之前，不应填写该字段，也不应执行 `execution transfer --connect`。
+
+## 安全边界与禁止行为
+
+- 不索要、保存或写入服务器密码；使用当前电脑的专用 SSH 密钥，并保留严格的主机密钥验证。
+- 不关闭 `StrictHostKeyChecking`，不接受未知主机指纹，不把训练服务器 `10.59.143.97` 当作本集群入口。
+- 不在 `mu01` 提交 VASP，不访问白名单之外的计算节点，不通过模型生成的任意字符串绕过节点校验。
+- 不取消、重启、发送信号或修改其他用户的进程和计算目录；不能因为预检结果看起来空闲就自动占用节点。
+- 传输只允许 workflow manifest 指定的 `POSCAR`、`POTCAR`、`INCAR`、`KPOINTS` 和 `manifest.json`；禁止把 `OUTCAR`、`CHGCAR`、`WAVECAR`、`vasprun.xml` 或任意用户文件作为输入上传。
+- 远端只允许在用户确认的专用 `remote_root` 下创建唯一叶目录；拒绝已有路径、符号链接、路径穿越和覆盖。失败目录不会自动删除。
+- POTCAR 是本地授权数据，不能发送给 LLM，也不能提交到 Git。LLM 只能看到必要的结构/目标元数据和脱敏后的选择结果。
+- LLM 生成的 INCAR、KPOINTS、POTCAR 选择或 MPI 参数都必须先转换为类型化请求，并通过确定性校验；校验失败时停在人工审查，不自动“猜改”。
+- 真实运行能力必须有显式开关和用户确认；dry-run、plan、simulate 不得被描述成已完成计算。
+
+## 当前已知问题与下一步
+
+以下问题是当前代码状态的真实限制，不是 README 的遗漏：
+
+- 本机 OpenSSH 到集群此前出现 `banner exchange: Connection to UNKNOWN port -1: Connection refused`，连接链路尚未打通；因此第九步只停留在计划层。
+- `config/execution/cluster.json` 的 `remote_root` 仍为 `null`，没有确认组内批准的远端运行根目录。
+- 尚未验证 Intel MPI 在单个白名单节点上的隔离、CPU 绑定、环境模块和 VASP 可执行文件路径。
+- 尚未实现真实 `launch`、异步状态监控、`cancel` 和受控 `retry`；当前仅有预检、计划、模拟和传输。
+- 尚未开发 VASP 后处理：总能量、逐原子局域磁矩、总磁矩、自旋分辨 DOS、收敛状态、不同磁序能量比较和结构化报告都待实现。
+- 尚未接入 LLM/CrewAI/MCP。官方 Wiki 已完成受控正文抽取和可追溯切块，BM25/Qdrant 混合检索、20 题离线评测和本地 MiniLM semantic embedding 已完成第一版；下一阶段定义 Agent 的结构化工具协议与审批状态机。不能让 LLM 直接执行 SSH shell。
+- mCIF 的一般声明 BNS 与完整磁群身份自动核验、一般非共线纹理的物理旋转/MAE 契约、真实收敛测试仍未完成。
+
+当前已转向专业 VASP Agent/RAG 路线。第 10.3 步已经建立 BM25 基线并完成 20 题离线评测；第 10.4 步加入本地 Qdrant 向量索引、确定性哈希 embedding 和 BM25+向量 RRF 融合；第 10.6 步完成固定 revision 的本地 MiniLM embedding 及同题集对比。下一步定义带引用的 RAG 问答接口。真实 SSH、MPI smoke test、launch/monitor 和 OUTCAR/vasprun.xml 后处理仍保持禁用，待知识与工具边界稳定后按人工批准逐项推进。
+
 ## 历史审计与测试
 
 按相邻 POSCAR 和所选势检查全部原始 INCAR：
@@ -392,3 +540,75 @@ uv run --frozen pytest
 - 赝势选择只能引用注册表中存在的势，拼接前校验源文件哈希。
 - `var/` 保存本机注册表、临时文件及报告，不进入 Git。
 - 后续集群访问使用 `execution` 中的固定 SSH/直接 MPI 计划，不执行模型任意拼接的 shell 命令；本项目不使用 Slurm。
+
+## 第 10.3 步：BM25 检索基线
+
+第 10.3 步把 58 个 Wiki chunk 和 16 个批准的本地 Markdown 章节组装为 74 文档语料。`build-bm25`、`search` 和 `evaluate` 提供来源类型、任务、磁性模式和验证状态过滤，并始终返回原始引用、revision 和 SHA256。20 题评测只衡量证据检索覆盖，不把命中率描述为答案正确率。
+
+## 第 10.4 步：本地向量检索与混合排序
+
+本步增加可选 Qdrant 本地索引。当前 `hash-token-bigram-v1` 是 384 维确定性工程基线，并非中文语义模型；搜索以 `rrf-v1` 融合向量和 BM25 排名，最终 quote 和 provenance 仍从受校验的 `documents.jsonl` 读取。
+
+```powershell
+uv sync --extra dev --extra rag --frozen
+uv run --frozen magvasp knowledge build-vector `
+  --corpus var\knowledge\bm25-20260908-r2 `
+  --output var\knowledge\qdrant-20260908-r2
+
+uv run --frozen magvasp knowledge evaluate `
+  --index var\knowledge\qdrant-20260908-r2 --backend vector `
+  --suite tests\fixtures\knowledge\rag_evaluation_cases.json --limit 5
+```
+
+实际评测为 19/20 题有结果，retrieval rate `0.95`、required source-type coverage `0.725`、evidence-term coverage `0.722222...`、forbidden exact-quote rate `0.0`。第一次并行打开同一 Qdrant 本地目录触发文件锁；本地持久化模式必须串行使用，若未来确需并发，应改用独立 Qdrant server。旧 `r1` BM25 仍记录旧 tokenizer，程序没有覆盖它，而是生成 `cjk-word-v2` 的 `r2`。Windows 捕获的中文 CLI 输出曾出现乱码，因此当前分数不能作为中文语义模型的最终结论。
+
+## 第 10.5 步：RAG 证据包契约
+
+`knowledge evidence` 把检索结果转换成后续 LLM 可以读取、但不能执行的 JSON 证据包。包内使用稳定的 `E1`、`E2` 引用编号，记录缺失来源类型、未验证证据、显式人工审核要求和索引 manifest 哈希。`allowed_action` 固定为 `draft_only`，冲突状态固定为 `not_semantically_assessed`；这意味着当前程序不会假装已经理解并解决来源间的语义冲突。
+
+```powershell
+uv run --frozen magvasp knowledge evidence `
+  --index var\knowledge\qdrant-20260908-r2 --backend vector `
+  --query "非共线计算的 MAGMOM 应如何填写？" `
+  --required-source-types official --human-review `
+  --output var\knowledge\evidence\noncollinear-magmom.json
+```
+
+状态含义：`evidence_missing` 表示没有可用证据；`review_required` 表示存在未验证引用、缺少要求的来源类型或任务显式要求人工审核；只有全部引用均已验证且来源要求齐全时才会得到 `evidence_ready`。无论状态如何，证据包都不能直接修改 INCAR/KPOINTS/POTCAR、上传文件或执行 SSH。
+
+本轮新增了证据包严格模型、CLI、防覆盖写入、引用 provenance 和风险测试。定向知识测试为 `29 passed`，最终全量测试为 `440 passed, 1 skipped`，`git diff --check` 通过。本机未安装 Ruff，因此没有把 Ruff 检查记为通过。实际 CLI 已生成 `var/knowledge/evidence/noncollinear-magmom.json`：包含 5 条官方引用，由于这些 Wiki chunk 尚未针对目标 VASP 5.4.4 完成人工版本确认且命令显式要求复核，状态正确地返回 `review_required`。
+
+## 第 10.6 步：Windows CLI 与本地多语言 embedding
+
+本步完成了 Windows 重定向输出的 UTF-8 边界修复，并接入一个可审查、可完全离线运行的 Apache-2.0 embedding 模型。模型准备和逐文件来源核验记录见 [`docs/knowledge/embedding_model.md`](docs/knowledge/embedding_model.md)。运行时使用固定的 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` 模型和 Qdrant ONNX 仓库 revision `faf4aa4225822f3bc6376869cb1164e8e3feedd0`，维度为 384；模型目录必须预先准备并注册，检索路径不会自动下载或访问网络。
+
+```powershell
+# 预先准备好固定 revision 的模型目录后，只登记文件清单和 SHA256
+uv run --frozen magvasp knowledge register-model `
+  --model-dir var\knowledge\models\paraphrase-multilingual-MiniLM-L12-v2-onnx-Q
+
+# 使用本地模型构建 semantic Qdrant 索引
+uv run --frozen magvasp knowledge build-vector `
+  --corpus var\knowledge\bm25-20260908-r2 `
+  --output var\knowledge\minilm-20260908-r1 `
+  --model-dir var\knowledge\models\paraphrase-multilingual-MiniLM-L12-v2-onnx-Q
+
+uv run --frozen magvasp knowledge evaluate `
+  --index var\knowledge\minilm-20260908-r1 --backend vector `
+  --model-dir var\knowledge\models\paraphrase-multilingual-MiniLM-L12-v2-onnx-Q `
+  --suite tests\fixtures\knowledge\rag_evaluation_cases.json
+```
+
+同一套 20 题、相同过滤器和 evidence provenance 检查下，三种后端的结果如下。这里的“检索率”只表示返回了证据文档，不代表答案已经通过科学或人工验证。
+
+| 后端 | 检索率 | 来源类型覆盖 | 证据词覆盖 |
+| --- | ---: | ---: | ---: |
+| BM25 | 0.90 | 0.650 | 0.6806 |
+| hash-token-bigram-v1 | 0.95 | 0.725 | 0.7222 |
+| MiniLM semantic | 0.95 | 0.800 | 0.7639 |
+
+原始评测报告保存在 Git 忽略的 `var/knowledge/evaluation-10.6-{bm25,hash,minilm}.json`；正式说明见 [`docs/knowledge/embedding_evaluation.md`](docs/knowledge/embedding_evaluation.md)。MiniLM 提升了来源类型和证据词覆盖，但仍有未命中或需人工检查的问题，不能解除 `draft_only` 边界。
+
+## 当前 RAG 下一步
+
+下一步是第 10.7 步：实现“证据包 -> 带 `[E#]` 引用的结构化回答草稿 -> 引用完整性校验 -> 人工审核”，仍不连接真实集群。回答草稿必须只能引用证据包中存在的编号，缺失、冲突或未验证证据时保持人工审核状态。

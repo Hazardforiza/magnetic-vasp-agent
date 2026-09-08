@@ -18,6 +18,12 @@ dependencies = [
 dev = [
     "pytest>=8,<9",
 ]
+rag = [
+    "qdrant-client>=1.15,<2",
+]
+semantic = [
+    "fastembed>=0.8,<1",
+]
 
 [project.scripts]
 magvasp = "magnetic_vasp_agent.cli:app"
