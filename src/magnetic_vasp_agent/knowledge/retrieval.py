@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -19,6 +20,11 @@ from magnetic_vasp_agent.knowledge.models import (
     RagEvaluationSuite,
 )
 from magnetic_vasp_agent.knowledge.retrieval_models import (
+    AnswerDraft,
+    AnswerDraftClaim,
+    AnswerDraftReviewReason,
+    CitationIntegrity,
+    CITATION_MARKER_PATTERN,
     EvaluationCaseResult,
     EvaluationReport,
     CitedEvidence,
@@ -763,6 +769,130 @@ def write_evidence_package(package: EvidencePackage, output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("x", encoding="utf-8", newline="\n") as handle:
         handle.write(package.model_dump_json(indent=2) + "\n")
+
+
+def evidence_package_sha256(package: EvidencePackage) -> str:
+    """Return a stable digest for the exact typed evidence package payload."""
+    payload = package.model_dump_json(
+        by_alias=False, exclude_none=False, indent=None
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _citation_markers(text: str) -> tuple[list[str], list[str]]:
+    """Extract valid ``[E#]`` markers and report malformed E markers."""
+    valid = list(dict.fromkeys(CITATION_MARKER_PATTERN.findall(text)))
+    malformed: list[str] = []
+    for marker in re.findall(r"\[[^\]]*\]", text):
+        if marker.startswith("[E") and marker not in {f"[{item}]" for item in valid}:
+            malformed.append(marker)
+    return valid, list(dict.fromkeys(malformed))
+
+
+def validate_answer_draft(
+    draft: AnswerDraft, package: EvidencePackage
+) -> CitationIntegrity:
+    """Check that every draft citation exists in the bound evidence package.
+
+    The function does not mutate the draft and never upgrades ``draft_only`` to an
+    executable action.  It is useful when loading drafts produced by external
+    callers or after manual edits.
+    """
+    if draft.evidence_package_sha256 != evidence_package_sha256(package):
+        raise ValueError("answer draft evidence package hash mismatch")
+    if draft.question != package.question:
+        raise ValueError("answer draft question does not match evidence package")
+    if draft.evidence_package_status != package.status:
+        raise ValueError("answer draft evidence package status does not match package")
+    available = [item.citation_id for item in package.citations]
+    cited = list(dict.fromkeys(citation for claim in draft.claims for citation in claim.citation_ids))
+    unknown = [item for item in cited if item not in available]
+    malformed: list[str] = []
+    for claim in draft.claims:
+        _, claim_malformed = _citation_markers(claim.text)
+        malformed.extend(claim_malformed)
+    uncited = [claim.claim_id for claim in draft.claims if not claim.citation_ids]
+    integrity = CitationIntegrity(
+        available_citation_ids=available,
+        cited_citation_ids=cited,
+        unknown_citation_ids=list(dict.fromkeys(unknown)),
+        malformed_citation_markers=list(dict.fromkeys(malformed)),
+        uncited_claim_ids=uncited,
+        citation_complete=not (unknown or malformed or uncited),
+    )
+    if draft.citation_integrity != integrity:
+        raise ValueError("answer draft citation integrity does not match package")
+    expected_status = (
+        "draft_ready_for_review"
+        if integrity.citation_complete and package.status == "evidence_ready"
+        else "review_required"
+    )
+    if draft.status != expected_status:
+        raise ValueError("answer draft status does not match its review conditions")
+    return integrity
+
+
+def build_answer_draft(
+    package: EvidencePackage,
+    claims: list[str],
+    *,
+    limitations: list[str] | None = None,
+) -> AnswerDraft:
+    """Build a reviewable answer draft from an evidence package.
+
+    Claims are plain text containing zero or more literal ``[E#]`` markers.  A
+    claim without a marker, an unknown marker, malformed marker, or package risk
+    leaves the draft in ``review_required`` status.  Limitations are explicitly
+    carried as non-technical caveats and do not require citations.
+    """
+    draft_claims: list[AnswerDraftClaim] = []
+    all_malformed: list[str] = []
+    for position, text in enumerate(claims, start=1):
+        markers, malformed = _citation_markers(text)
+        all_malformed.extend(malformed)
+        draft_claims.append(
+            AnswerDraftClaim(claim_id=f"C{position}", text=text, citation_ids=markers)
+        )
+    available = [item.citation_id for item in package.citations]
+    cited = list(dict.fromkeys(citation for claim in draft_claims for citation in claim.citation_ids))
+    unknown = [item for item in cited if item not in available]
+    uncited = [claim.claim_id for claim in draft_claims if not claim.citation_ids]
+    integrity = CitationIntegrity(
+        available_citation_ids=available,
+        cited_citation_ids=cited,
+        unknown_citation_ids=list(dict.fromkeys(unknown)),
+        malformed_citation_markers=list(dict.fromkeys(all_malformed)),
+        uncited_claim_ids=uncited,
+        citation_complete=not (unknown or all_malformed or uncited),
+    )
+    reasons: list[AnswerDraftReviewReason] = []
+    if package.status == "evidence_missing":
+        reasons.append(AnswerDraftReviewReason(code="evidence_missing", message="Evidence package has no usable citations."))
+    elif package.status == "review_required":
+        reasons.append(AnswerDraftReviewReason(code="evidence_package_review_required", message="Evidence package contains risks requiring human review."))
+    if not integrity.citation_complete:
+        reasons.append(AnswerDraftReviewReason(code="citation_incomplete", message="One or more claims have missing, malformed, or unknown citations.", citation_ids=unknown))
+    reasons.append(AnswerDraftReviewReason(code="human_review_required", message="Answer drafts are always subject to human review and remain draft_only."))
+    return AnswerDraft(
+        schema_version=1,
+        question=package.question,
+        evidence_package_sha256=evidence_package_sha256(package),
+        evidence_package_status=package.status,
+        claims=draft_claims,
+        limitations=limitations or [],
+        citation_integrity=integrity,
+        status="draft_ready_for_review" if integrity.citation_complete and package.status == "evidence_ready" else "review_required",
+        review_reasons=reasons,
+    )
+
+
+def write_answer_draft(draft: AnswerDraft, output: Path) -> None:
+    """Write an answer draft without overwriting an existing artifact."""
+    if output.exists() or output.is_symlink():
+        raise FileExistsError("answer draft exists; choose a new output path")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("x", encoding="utf-8", newline="\n") as handle:
+        handle.write(draft.model_dump_json(indent=2) + "\n")
 
 
 def evaluate_vector(

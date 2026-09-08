@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -10,6 +11,9 @@ from magnetic_vasp_agent.knowledge.models import (
     MagneticMode,
     StrictModel,
 )
+
+
+CITATION_MARKER_PATTERN = re.compile(r"\[(E[1-9][0-9]*)\]")
 
 
 class RetrievalDocument(StrictModel):
@@ -146,6 +150,108 @@ class EvidencePackage(StrictModel):
         "not_semantically_assessed"
     )
     answering_rules: list[str]
+
+
+class AnswerDraftClaim(StrictModel):
+    """One technical assertion in an answer draft.
+
+    ``citation_ids`` is derived from the literal ``[E#]`` markers in ``text``.
+    Keeping it explicitly in the serialized draft makes the cited assertions easy
+    to review without reparsing prose, while the validator prevents the two
+    representations from drifting apart.
+    """
+
+    claim_id: str = Field(pattern=r"^C[1-9][0-9]*$")
+    text: str = Field(min_length=1)
+    citation_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def citation_ids_match_text(self) -> AnswerDraftClaim:
+        markers = list(dict.fromkeys(CITATION_MARKER_PATTERN.findall(self.text)))
+        if self.citation_ids != markers:
+            raise ValueError(
+                "claim citation_ids must exactly match [E#] markers in claim text"
+            )
+        return self
+
+
+class CitationIntegrity(StrictModel):
+    """Machine-checkable result of comparing a draft with its evidence package."""
+
+    available_citation_ids: list[str]
+    cited_citation_ids: list[str]
+    unknown_citation_ids: list[str]
+    malformed_citation_markers: list[str]
+    uncited_claim_ids: list[str]
+    citation_complete: bool
+
+    @model_validator(mode="after")
+    def complete_matches_findings(self) -> CitationIntegrity:
+        for field_name in (
+            "available_citation_ids",
+            "cited_citation_ids",
+            "unknown_citation_ids",
+            "malformed_citation_markers",
+            "uncited_claim_ids",
+        ):
+            values = getattr(self, field_name)
+            if len(values) != len(set(values)):
+                raise ValueError(f"{field_name} must not contain duplicates")
+        expected_complete = not (
+            self.unknown_citation_ids
+            or self.malformed_citation_markers
+            or self.uncited_claim_ids
+        )
+        if self.citation_complete != expected_complete:
+            raise ValueError("citation_complete does not match citation findings")
+        return self
+
+
+class AnswerDraftReviewReason(StrictModel):
+    code: Literal[
+        "human_review_required",
+        "citation_incomplete",
+        "evidence_missing",
+        "evidence_package_review_required",
+    ]
+    message: str = Field(min_length=1)
+    citation_ids: list[str] = Field(default_factory=list)
+
+
+class AnswerDraft(StrictModel):
+    """A non-executable response draft bound to one immutable evidence package."""
+
+    schema_version: Literal[1]
+    question: str = Field(min_length=1)
+    evidence_package_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence_package_status: Literal[
+        "evidence_missing", "review_required", "evidence_ready"
+    ]
+    claims: list[AnswerDraftClaim] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    citation_integrity: CitationIntegrity
+    status: Literal["draft_ready_for_review", "review_required"]
+    human_review_required: Literal[True] = True
+    allowed_action: Literal["draft_only"] = "draft_only"
+    review_reasons: list[AnswerDraftReviewReason] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_claim_ids(self) -> AnswerDraft:
+        claim_ids = [claim.claim_id for claim in self.claims]
+        if len(claim_ids) != len(set(claim_ids)):
+            raise ValueError("answer draft claim ids must be unique")
+        if any(not item.strip() for item in self.limitations):
+            raise ValueError("answer draft limitations must be non-empty")
+        cited = list(
+            dict.fromkeys(
+                citation
+                for claim in self.claims
+                for citation in claim.citation_ids
+            )
+        )
+        if self.citation_integrity.cited_citation_ids != cited:
+            raise ValueError("draft citation integrity does not match claim citations")
+        return self
 
 
 class EvaluationCaseResult(StrictModel):

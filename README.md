@@ -8,7 +8,7 @@
 
 已完成第 1–9 步的本地确定性内核。RAG 方向已完成第 10.1–10.6 步：知识治理与 20 题评测集、9 个 VASP Wiki 页面/58 个可追溯 chunk、74 文档 BM25 基线、本地 Qdrant 混合检索、离线多语言 MiniLM embedding，以及只允许 `draft_only` 的类型化证据包。当前尚未接入 LLM API，证据包也不能自动修改 VASP 输入或触发远程执行。
 
-当前分支为 `codex/bootstrap`，HEAD 仍为 `5037181 feat: add controlled workflow transfer`，第 10.1–10.6 步还在工作区等待审查和提交。最近一次全量测试为 **457 passed, 1 skipped**；`git diff --check` 通过。本机当前环境没有安装 Ruff，因此不能把本轮 Ruff 检查写成已通过。当前仍是“本地生成与审查阶段”：尚未连接或上传到真实集群，尚未启动/取消/重试 VASP，也尚未实现 VASP 输出后处理。
+当前分支为 `codex/bootstrap`，HEAD 为 `c8559ca feat: add governed local semantic retrieval`，第 10.1–10.7 步还在工作区等待审查和提交。最近一次全量测试为 **463 passed, 1 skipped**；`git diff --check` 通过。本机当前环境没有安装 Ruff，因此不能把本轮 Ruff 检查写成已通过。当前仍是“本地生成与审查阶段”：尚未连接或上传到真实集群，尚未启动/取消/重试 VASP，也尚未实现 VASP 输出后处理。
 
 `mcif/` 和 `vasp笔记/` 是用户原始资料目录，目前保持未跟踪状态，不属于本轮功能提交，也不应被自动修改或提交。
 
@@ -33,6 +33,7 @@
 | 10.4 Qdrant 混合检索 | 工作区（待提交） | `knowledge/retrieval.py`、`retrieval_models.py`、`pyproject.toml`、`uv.lock` | 使用本地确定性 hash embedding 建立 Qdrant 工程基线，并以 RRF 融合 BM25；保留引用 provenance 和索引完整性检查。 |
 | 10.5 RAG 证据契约 | 工作区（待提交） | `knowledge/retrieval.py`、`retrieval_models.py`、`knowledge_cli.py`、`tests/test_knowledge.py` | 生成稳定引用编号、缺失来源、未验证证据和人工审核风险；输出只能用于回答草稿，不能驱动输入修改或集群执行。 |
 | 10.6 本地多语言 embedding | 工作区（待提交） | `knowledge/embedding.py`、`knowledge/retrieval.py`、`knowledge_cli.py`、`tests/test_knowledge.py`、`docs/knowledge/embedding_model.md` | 固定 Apache-2.0 MiniLM ONNX revision；注册并校验模型文件清单、哈希和运行时；支持离线 semantic Qdrant 索引；在同一 20 题集上与 BM25/hash 基线比较。 |
+| 10.7 带引用回答草稿 | 工作区（待提交） | `knowledge/retrieval_models.py`、`knowledge/retrieval.py`、`knowledge_cli.py`、`tests/test_answer_draft.py` | 将证据包绑定到结构化回答草稿；强制 `[E#]` 引用与完整性校验；缺失、未知或未验证证据保持人工审核，动作固定为 `draft_only`。 |
 
 上述提交还共同包含 `.gitignore`/`.gitattributes`、`pyproject.toml`、`uv.lock`、CLI 入口和回归测试。`POTCAR` 内容不进入 Git；测试中的赝势是明确标注的合成文本，不含授权数据。
 
@@ -611,4 +612,18 @@ uv run --frozen magvasp knowledge evaluate `
 
 ## 当前 RAG 下一步
 
-下一步是第 10.7 步：实现“证据包 -> 带 `[E#]` 引用的结构化回答草稿 -> 引用完整性校验 -> 人工审核”，仍不连接真实集群。回答草稿必须只能引用证据包中存在的编号，缺失、冲突或未验证证据时保持人工审核状态。
+下一步是第 10.8 步：在保持 `draft_only` 的前提下扩展回答草稿的人工审核工作流和冲突标注，仍不连接真实集群。回答草稿只能引用证据包中存在的编号，缺失、冲突或未验证证据时保持人工审核状态。
+
+## 第 10.7 步：带引用的回答草稿
+
+`knowledge draft` 将一个已写入磁盘的 `EvidencePackage` 和候选技术陈述绑定为结构化 `AnswerDraft`。每条陈述必须在文本中包含 literal `[E#]` 标记；程序会检查引用是否存在于证据包、是否有未引用陈述、清单是否被篡改，并保存证据包 SHA256。缺失、未知、格式错误或未验证证据都会使草稿保持 `review_required`。即使所有引用完整，草稿也始终 `human_review_required=true` 且 `allowed_action=draft_only`。
+
+```powershell
+uv run --frozen magvasp knowledge draft `
+  --evidence var\knowledge\evidence\noncollinear-magmom.json `
+  --claim "非共线计算的初始磁矩应按每个原子的三个分量填写。[E1]" `
+  --limitation "Wiki revision 尚未针对 VASP 5.4.4 完成人工版本确认。" `
+  --output var\knowledge\drafts\noncollinear-magmom.json
+```
+
+该命令只生成可审查 JSON，不调用 LLM、不修改 POSCAR/INCAR/KPOINTS/POTCAR，也不上传或执行任何远程操作。
