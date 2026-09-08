@@ -20,6 +20,7 @@ from magnetic_vasp_agent.knowledge.models import (
     RagEvaluationSuite,
 )
 from magnetic_vasp_agent.knowledge.retrieval import (
+    build_answer_draft,
     build_bm25_index,
     build_evidence_package,
     build_vector_index,
@@ -28,8 +29,9 @@ from magnetic_vasp_agent.knowledge.retrieval import (
     search_bm25,
     search_vector,
     write_evidence_package,
+    write_answer_draft,
 )
-from magnetic_vasp_agent.knowledge.retrieval_models import RetrievalFilter
+from magnetic_vasp_agent.knowledge.retrieval_models import EvidencePackage, RetrievalFilter
 from magnetic_vasp_agent.knowledge.embedding import register_local_model
 
 _BACKEND_HELP = "Retrieval backend: bm25 or vector."
@@ -236,6 +238,27 @@ def create_evidence_package(
         write_evidence_package(package, output)
         typer.echo(package.model_dump_json(indent=2))
     except (ValueError, OSError, RuntimeError) as exc:
+        _error(exc)
+
+
+@knowledge_app.command("draft")
+def create_answer_draft(
+    evidence: Path = typer.Option(..., "--evidence", exists=True, dir_okay=False),
+    output: Path = typer.Option(..., "--output"),
+    claims: list[str] = typer.Option(
+        [], "--claim", help="One technical claim; include literal [E#] markers. Repeat for multiple claims."
+    ),
+    limitations: list[str] = typer.Option(
+        [], "--limitation", help="Caveat carried into the draft. Repeat as needed."
+    ),
+) -> None:
+    """Create a human-reviewable [E#]-cited draft; output remains draft_only."""
+    try:
+        package = EvidencePackage.model_validate_json(evidence.read_bytes())
+        draft = build_answer_draft(package, claims, limitations=limitations)
+        write_answer_draft(draft, output)
+        typer.echo(draft.model_dump_json(indent=2))
+    except (ValueError, OSError) as exc:
         _error(exc)
 
 

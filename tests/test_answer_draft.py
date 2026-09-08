@@ -1,6 +1,8 @@
 import pytest
 from pydantic import ValidationError
+from typer.testing import CliRunner
 
+from magnetic_vasp_agent.cli import app
 from magnetic_vasp_agent.knowledge.retrieval import (
     build_answer_draft,
     evidence_package_sha256,
@@ -100,3 +102,35 @@ def test_claim_markers_must_match_citation_ids():
         from magnetic_vasp_agent.knowledge.retrieval_models import AnswerDraftClaim
 
         AnswerDraftClaim(claim_id="C1", text="Claim [E1]", citation_ids=[])
+
+
+def test_knowledge_draft_cli_writes_review_only_artifact(tmp_path):
+    evidence = tmp_path / "evidence.json"
+    evidence.write_text(
+        evidence_package(status="review_required").model_dump_json(), encoding="utf-8"
+    )
+    output = tmp_path / "draft.json"
+    result = CliRunner().invoke(
+        app,
+        [
+            "knowledge",
+            "draft",
+            "--evidence",
+            str(evidence),
+            "--output",
+            str(output),
+            "--claim",
+            "Set initial moments with MAGMOM. [E1]",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    payload = output.read_text(encoding="utf-8")
+    assert '"status": "review_required"' in payload
+    assert '"allowed_action": "draft_only"' in payload
+
+    repeated = CliRunner().invoke(
+        app,
+        ["knowledge", "draft", "--evidence", str(evidence), "--output", str(output)],
+    )
+    assert repeated.exit_code == 2
+    assert "answer draft exists" in repeated.output
