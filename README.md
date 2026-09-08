@@ -8,7 +8,7 @@
 
 已完成第 1–9 步的本地确定性内核。RAG 方向已完成第 10.1–10.6 步：知识治理与 20 题评测集、9 个 VASP Wiki 页面/58 个可追溯 chunk、74 文档 BM25 基线、本地 Qdrant 混合检索、离线多语言 MiniLM embedding，以及只允许 `draft_only` 的类型化证据包。当前尚未接入 LLM API，证据包也不能自动修改 VASP 输入或触发远程执行。
 
-当前分支为 `codex/bootstrap`，HEAD 为 `c8559ca feat: add governed local semantic retrieval`，第 10.1–10.7 步还在工作区等待审查和提交。最近一次全量测试为 **463 passed, 1 skipped**；`git diff --check` 通过。本机当前环境没有安装 Ruff，因此不能把本轮 Ruff 检查写成已通过。当前仍是“本地生成与审查阶段”：尚未连接或上传到真实集群，尚未启动/取消/重试 VASP，也尚未实现 VASP 输出后处理。
+当前分支为 `codex/bootstrap`，HEAD 为 `a23149f test: cover answer draft cli`，第 10.1–10.7 步已提交。最近一次全量测试为 **464 passed, 1 skipped**；`git diff --check` 通过。本机当前环境没有安装 Ruff，因此不能把本轮 Ruff 检查写成已通过。当前仍是“本地生成与审查阶段”：尚未连接或上传到真实集群，尚未启动/取消/重试 VASP，也尚未实现 VASP 输出后处理。
 
 `mcif/` 和 `vasp笔记/` 是用户原始资料目录，目前保持未跟踪状态，不属于本轮功能提交，也不应被自动修改或提交。
 
@@ -27,13 +27,13 @@
 | 7. mCIF 磁性候选入口 | `3b0c8be` | `mcif_models.py`、`mcif.py`、`mcif_cli.py`、`config/workflows/FeO.generated.mcif.json`、`tests/fixtures/generated_mcif/`、`tests/test_mcif.py` | 解析生成模型输出的 mCIF；展开磁空间操作和中心操作；处理晶轴磁矩到笛卡尔/ VASP 自旋坐标的转换；按源位点建立逐原子映射；保持物种和原子顺序；把候选编号、BNS 声明、Wyckoff 来源和 MAGMOM 记录进 manifest。 |
 | 8. SSH/直接 MPI 执行准备 | `ee72ab8` | `execution.py`、`execution_models.py`、`execution_probe.py`、`execution_simulator.py`、`execution_cli.py`、`config/execution/cluster.json`、`tests/test_execution.py` | 针对无 Slurm 集群建立固定入口、节点白名单、只读预检、CPU 拓扑检查、MPI 命令计划和本地生命周期模拟；默认禁用真实执行；不选择 `mu01`，不接受任意命令，不干预他人进程。 |
 | 9. 受控 SSH/SFTP 传输 | `5037181` | `transfer.py`、`transfer_models.py`、`execution_cli.py`、`config/execution/FeO.cu21.transfer.json`、`tests/test_execution.py` | 为已生成 workflow 绑定远端专用目录；只允许传输规定的输入文件和 manifest；拒绝覆盖、符号链接和不安全路径；上传后用 SHA256 逐项核验；默认只生成计划，`remote_root` 未确认前不会连接集群。 |
-| 10.1 RAG 知识治理与清单 | 工作区（待提交） | `knowledge/models.py`、`knowledge/inventory.py`、`knowledge_cli.py`、`config/knowledge/sources.json`、`docs/knowledge/`、`tests/fixtures/knowledge/`、`tests/test_knowledge.py` | 将官方资料、组内策略、已验证案例、运行经验和个人笔记分级；只读登记本地文件哈希和外部引用；排除 POTCAR/运行产物；识别重复内容；建立 20 个带预期事实、禁止结论和人工审批标记的 RAG 评测问题。 |
-| 10.2 VASP Wiki 抓取与切块 | 工作区（待提交） | `knowledge/wiki.py`、`knowledge/wiki_models.py`、`knowledge_cli.py`、`docs/knowledge/wiki_capture.md`、`tests/test_knowledge.py` | 固定域名和 MediaWiki API 抓取；记录 page/revision/快照哈希；按章节和块级语义生成 JSONL；拒绝任意 URL、跨域重定向、超大响应和覆盖；运行时正文只保存在 Git 忽略的 `var/knowledge/`。 |
-| 10.3 BM25 检索基线 | 工作区（待提交） | `knowledge/retrieval.py`、`retrieval_models.py`、`knowledge_cli.py`、`tests/test_knowledge.py` | 从受校验 Wiki chunk 和批准的 Markdown 构建 74 文档语料；支持来源、任务、磁性模式过滤和 20 题离线评测。 |
-| 10.4 Qdrant 混合检索 | 工作区（待提交） | `knowledge/retrieval.py`、`retrieval_models.py`、`pyproject.toml`、`uv.lock` | 使用本地确定性 hash embedding 建立 Qdrant 工程基线，并以 RRF 融合 BM25；保留引用 provenance 和索引完整性检查。 |
-| 10.5 RAG 证据契约 | 工作区（待提交） | `knowledge/retrieval.py`、`retrieval_models.py`、`knowledge_cli.py`、`tests/test_knowledge.py` | 生成稳定引用编号、缺失来源、未验证证据和人工审核风险；输出只能用于回答草稿，不能驱动输入修改或集群执行。 |
-| 10.6 本地多语言 embedding | 工作区（待提交） | `knowledge/embedding.py`、`knowledge/retrieval.py`、`knowledge_cli.py`、`tests/test_knowledge.py`、`docs/knowledge/embedding_model.md` | 固定 Apache-2.0 MiniLM ONNX revision；注册并校验模型文件清单、哈希和运行时；支持离线 semantic Qdrant 索引；在同一 20 题集上与 BM25/hash 基线比较。 |
-| 10.7 带引用回答草稿 | 工作区（待提交） | `knowledge/retrieval_models.py`、`knowledge/retrieval.py`、`knowledge_cli.py`、`tests/test_answer_draft.py` | 将证据包绑定到结构化回答草稿；强制 `[E#]` 引用与完整性校验；缺失、未知或未验证证据保持人工审核，动作固定为 `draft_only`。 |
+| 10.1 RAG 知识治理与清单 | `c8559ca` | `knowledge/models.py`、`knowledge/inventory.py`、`knowledge_cli.py`、`config/knowledge/sources.json`、`docs/knowledge/`、`tests/fixtures/knowledge/`、`tests/test_knowledge.py` | 将官方资料、组内策略、已验证案例、运行经验和个人笔记分级；只读登记本地文件哈希和外部引用；排除 POTCAR/运行产物；识别重复内容；建立 20 个带预期事实、禁止结论和人工审批标记的 RAG 评测问题。 |
+| 10.2 VASP Wiki 抓取与切块 | `c8559ca` | `knowledge/wiki.py`、`knowledge/wiki_models.py`、`knowledge_cli.py`、`docs/knowledge/wiki_capture.md`、`tests/test_knowledge.py` | 固定域名和 MediaWiki API 抓取；记录 page/revision/快照哈希；按章节和块级语义生成 JSONL；拒绝任意 URL、跨域重定向、超大响应和覆盖；运行时正文只保存在 Git 忽略的 `var/knowledge/`。 |
+| 10.3 BM25 检索基线 | `c8559ca` | `knowledge/retrieval.py`、`retrieval_models.py`、`knowledge_cli.py`、`tests/test_knowledge.py` | 从受校验 Wiki chunk 和批准的 Markdown 构建 74 文档语料；支持来源、任务、磁性模式过滤和 20 题离线评测。 |
+| 10.4 Qdrant 混合检索 | `c8559ca` | `knowledge/retrieval.py`、`retrieval_models.py`、`pyproject.toml`、`uv.lock` | 使用本地确定性 hash embedding 建立 Qdrant 工程基线，并以 RRF 融合 BM25；保留引用 provenance 和索引完整性检查。 |
+| 10.5 RAG 证据契约 | `c8559ca` | `knowledge/retrieval.py`、`retrieval_models.py`、`knowledge_cli.py`、`tests/test_knowledge.py` | 生成稳定引用编号、缺失来源、未验证证据和人工审核风险；输出只能用于回答草稿，不能驱动输入修改或集群执行。 |
+| 10.6 本地多语言 embedding | `c8559ca` | `knowledge/embedding.py`、`knowledge/retrieval.py`、`knowledge_cli.py`、`tests/test_knowledge.py`、`docs/knowledge/embedding_model.md` | 固定 Apache-2.0 MiniLM ONNX revision；注册并校验模型文件清单、哈希和运行时；支持离线 semantic Qdrant 索引；在同一 20 题集上与 BM25/hash 基线比较。 |
+| 10.7 带引用回答草稿 | `9553b46` + `a23149f` | `knowledge/retrieval_models.py`、`knowledge/retrieval.py`、`knowledge_cli.py`、`tests/test_answer_draft.py` | 将证据包绑定到结构化回答草稿；强制 `[E#]` 引用与完整性校验；缺失、未知或未验证证据保持人工审核，动作固定为 `draft_only`。 |
 
 上述提交还共同包含 `.gitignore`/`.gitattributes`、`pyproject.toml`、`uv.lock`、CLI 入口和回归测试。`POTCAR` 内容不进入 Git；测试中的赝势是明确标注的合成文本，不含授权数据。
 
@@ -55,7 +55,7 @@ git show --stat 5037181
 uv run --frozen pytest
 ```
 
-在 HEAD `5037181` 的基线状态下，只有两个用户原始资料目录未跟踪：`mcif/`、`vasp笔记/`。完成第 10.1 步后，工作区还应出现本表标记为“待提交”的 knowledge 源码、配置、文档、fixture、测试和 README/CLI 修改；这些文件应在审查后作为独立里程碑提交，两个原始资料目录仍不纳入版本控制。
+在 HEAD `a23149f` 的当前状态下，只有两个用户原始资料目录未跟踪：`mcif/`、`vasp笔记/`；它们仍不纳入版本控制。
 
 ## 本地环境
 
