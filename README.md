@@ -627,3 +627,25 @@ uv run --frozen magvasp knowledge draft `
 ```
 
 该命令只生成可审查 JSON，不调用 LLM、不修改 POSCAR/INCAR/KPOINTS/POTCAR，也不上传或执行任何远程操作。
+
+## 第 10.8 步：冲突标注与人工审核记录
+
+回答草稿现在可以记录证据冲突和人工审核结果。冲突由人工明确指出，绑定两个或更多证据引用（例如 `E1,E2`），并保存描述；程序会拒绝未知引用、重复冲突编号和无效状态。审核记录包含审核人、决定、备注以及已解决的冲突编号。即使审核决定为 `accepted`，草稿仍保持 `human_review_required=true`、`status=review_required` 和 `allowed_action=draft_only`，不会因此修改任何 VASP 输入或触发远程执行。
+
+```powershell
+uv run --frozen magvasp knowledge conflict `
+  --draft var\knowledge\drafts\noncollinear-magmom.json `
+  --evidence var\knowledge\evidence\noncollinear-magmom.json `
+  --citation-ids E1,E2 `
+  --description "两个来源对适用版本的说明不同。" `
+  --output var\knowledge\drafts\noncollinear-magmom-conflict.json
+
+uv run --frozen magvasp knowledge review `
+  --draft var\knowledge\drafts\noncollinear-magmom-conflict.json `
+  --evidence var\knowledge\evidence\noncollinear-magmom.json `
+  --reviewer "researcher" --decision needs_revision `
+  --notes "确认目标 VASP 版本后再定稿。" `
+  --output var\knowledge\drafts\noncollinear-magmom-reviewed.json
+```
+
+冲突和审核字段都属于可审计元数据；证据包哈希、问题绑定、引用完整性和防覆盖写入校验仍然生效。

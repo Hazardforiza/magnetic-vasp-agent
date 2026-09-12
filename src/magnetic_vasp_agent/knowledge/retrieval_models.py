@@ -213,9 +213,55 @@ class AnswerDraftReviewReason(StrictModel):
         "citation_incomplete",
         "evidence_missing",
         "evidence_package_review_required",
+        "evidence_conflict",
     ]
     message: str = Field(min_length=1)
     citation_ids: list[str] = Field(default_factory=list)
+
+
+class EvidenceConflict(StrictModel):
+    """A reviewer supplied annotation that two or more citations disagree."""
+
+    conflict_id: str = Field(pattern=r"^CF[1-9][0-9]*$")
+    citation_ids: list[str] = Field(min_length=2)
+    description: str = Field(min_length=1)
+    status: Literal["unresolved", "resolved"] = "unresolved"
+    resolution: str | None = None
+
+    @model_validator(mode="after")
+    def conflict_contract(self) -> EvidenceConflict:
+        if len(self.citation_ids) != len(set(self.citation_ids)):
+            raise ValueError("conflict citation_ids must be unique")
+        if any(not re.fullmatch(r"E[1-9][0-9]*", item) for item in self.citation_ids):
+            raise ValueError("conflict citation_ids must use E# identifiers")
+        if self.status == "resolved" and not (self.resolution and self.resolution.strip()):
+            raise ValueError("resolved conflicts require a resolution")
+        if self.status == "unresolved" and self.resolution is not None:
+            raise ValueError("unresolved conflicts cannot include a resolution")
+        return self
+
+
+class AnswerDraftReview(StrictModel):
+    """Human review record; it never grants permission to execute a draft."""
+
+    status: Literal["review_required", "reviewed"] = "review_required"
+    reviewer: str | None = None
+    decision: Literal["pending", "accepted", "rejected", "needs_revision"] = "pending"
+    notes: str | None = None
+    resolved_conflict_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def review_contract(self) -> AnswerDraftReview:
+        if len(self.resolved_conflict_ids) != len(set(self.resolved_conflict_ids)):
+            raise ValueError("resolved_conflict_ids must be unique")
+        if self.status == "reviewed":
+            if not (self.reviewer and self.reviewer.strip()):
+                raise ValueError("reviewed drafts require reviewer")
+            if self.decision == "pending":
+                raise ValueError("reviewed drafts require a decision")
+        elif self.decision != "pending":
+            raise ValueError("review_required drafts must have pending decision")
+        return self
 
 
 class AnswerDraft(StrictModel):
@@ -234,6 +280,8 @@ class AnswerDraft(StrictModel):
     human_review_required: Literal[True] = True
     allowed_action: Literal["draft_only"] = "draft_only"
     review_reasons: list[AnswerDraftReviewReason] = Field(min_length=1)
+    conflicts: list[EvidenceConflict] = Field(default_factory=list)
+    review: AnswerDraftReview = Field(default_factory=AnswerDraftReview)
 
     @model_validator(mode="after")
     def unique_claim_ids(self) -> AnswerDraft:
@@ -251,6 +299,12 @@ class AnswerDraft(StrictModel):
         )
         if self.citation_integrity.cited_citation_ids != cited:
             raise ValueError("draft citation integrity does not match claim citations")
+        conflict_ids = [item.conflict_id for item in self.conflicts]
+        if len(conflict_ids) != len(set(conflict_ids)):
+            raise ValueError("answer draft conflict ids must be unique")
+        known_conflicts = set(conflict_ids)
+        if any(item not in known_conflicts for item in self.review.resolved_conflict_ids):
+            raise ValueError("review references an unknown conflict")
         return self
 
 

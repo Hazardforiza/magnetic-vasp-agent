@@ -23,6 +23,8 @@ from magnetic_vasp_agent.knowledge.retrieval_models import (
     AnswerDraft,
     AnswerDraftClaim,
     AnswerDraftReviewReason,
+    AnswerDraftReview,
+    EvidenceConflict,
     CitationIntegrity,
     CITATION_MARKER_PATTERN,
     EvaluationCaseResult,
@@ -824,7 +826,10 @@ def validate_answer_draft(
         raise ValueError("answer draft citation integrity does not match package")
     expected_status = (
         "draft_ready_for_review"
-        if integrity.citation_complete and package.status == "evidence_ready"
+        if integrity.citation_complete
+        and package.status == "evidence_ready"
+        and not draft.conflicts
+        and draft.review.status == "review_required"
         else "review_required"
     )
     if draft.status != expected_status:
@@ -884,6 +889,108 @@ def build_answer_draft(
         status="draft_ready_for_review" if integrity.citation_complete and package.status == "evidence_ready" else "review_required",
         review_reasons=reasons,
     )
+
+
+def annotate_answer_draft_conflict(
+    draft: AnswerDraft,
+    package: EvidencePackage,
+    *,
+    citation_ids: list[str],
+    description: str,
+    conflict_id: str | None = None,
+) -> AnswerDraft:
+    """Attach a deterministic, human supplied conflict annotation to a draft."""
+    validate_answer_draft(draft, package)
+    ids = list(dict.fromkeys(citation_ids))
+    available = {item.citation_id for item in package.citations}
+    if len(ids) < 2:
+        raise ValueError("a conflict requires at least two citation ids")
+    unknown = [item for item in ids if item not in available]
+    if unknown:
+        raise ValueError(f"conflict references unknown citation ids: {', '.join(unknown)}")
+    next_id = conflict_id or f"CF{len(draft.conflicts) + 1}"
+    if any(item.conflict_id == next_id for item in draft.conflicts):
+        raise ValueError("conflict id already exists")
+    conflict = EvidenceConflict(
+        conflict_id=next_id,
+        citation_ids=ids,
+        description=description,
+    )
+    reasons = list(draft.review_reasons)
+    if not any(item.code == "evidence_conflict" for item in reasons):
+        reasons.append(
+            AnswerDraftReviewReason(
+                code="evidence_conflict",
+                message="One or more evidence conflicts require human adjudication.",
+                citation_ids=ids,
+            )
+        )
+    updated = draft.model_copy(update={"conflicts": [*draft.conflicts, conflict], "review_reasons": reasons, "status": "review_required"})
+    validate_answer_draft(updated, package)
+    return updated
+
+
+def annotate_answer_draft_conflicts(
+    draft: AnswerDraft,
+    package: EvidencePackage,
+    conflicts: list[EvidenceConflict],
+) -> AnswerDraft:
+    """Attach several conflict annotations in order, preserving deterministic IDs."""
+    updated = draft
+    for conflict in conflicts:
+        updated = annotate_answer_draft_conflict(
+            updated,
+            package,
+            citation_ids=conflict.citation_ids,
+            description=conflict.description,
+            conflict_id=conflict.conflict_id,
+        )
+    return updated
+
+
+def record_answer_draft_review(
+    draft: AnswerDraft,
+    package: EvidencePackage,
+    *,
+    reviewer: str,
+    decision: str,
+    notes: str | None = None,
+    resolved_conflict_ids: list[str] | None = None,
+) -> AnswerDraft:
+    """Record a review decision while preserving the non executable draft boundary."""
+    validate_answer_draft(draft, package)
+    review = AnswerDraftReview(
+        status="reviewed",
+        reviewer=reviewer,
+        decision=decision,
+        notes=notes,
+        resolved_conflict_ids=resolved_conflict_ids or [],
+    )
+    if any(item not in {c.conflict_id for c in draft.conflicts} for item in review.resolved_conflict_ids):
+        raise ValueError("review references an unknown conflict")
+    if review.resolved_conflict_ids and not review.notes:
+        raise ValueError("resolving conflicts requires review notes")
+    unresolved = {
+        item.conflict_id for item in draft.conflicts if item.status == "unresolved"
+    }
+    if decision == "accepted" and not unresolved.issubset(set(review.resolved_conflict_ids)):
+        raise ValueError("accepted review requires all conflicts to be resolved")
+    # A review record is auditable metadata only. The draft remains review_required.
+    resolved = set(review.resolved_conflict_ids)
+    conflicts = [
+        item.model_copy(
+            update={"status": "resolved", "resolution": notes}
+        )
+        if item.conflict_id in resolved
+        else item
+        for item in draft.conflicts
+    ]
+    updated = draft.model_copy(update={"review": review, "conflicts": conflicts, "status": "review_required"})
+    validate_answer_draft(updated, package)
+    return updated
+
+
+review_answer_draft = record_answer_draft_review
 
 
 def write_answer_draft(draft: AnswerDraft, output: Path) -> None:

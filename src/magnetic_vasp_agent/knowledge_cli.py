@@ -20,18 +20,20 @@ from magnetic_vasp_agent.knowledge.models import (
     RagEvaluationSuite,
 )
 from magnetic_vasp_agent.knowledge.retrieval import (
+    annotate_answer_draft_conflict,
     build_answer_draft,
     build_bm25_index,
     build_evidence_package,
     build_vector_index,
     evaluate_bm25,
     evaluate_vector,
+    record_answer_draft_review,
     search_bm25,
     search_vector,
     write_evidence_package,
     write_answer_draft,
 )
-from magnetic_vasp_agent.knowledge.retrieval_models import EvidencePackage, RetrievalFilter
+from magnetic_vasp_agent.knowledge.retrieval_models import AnswerDraft, EvidencePackage, RetrievalFilter
 from magnetic_vasp_agent.knowledge.embedding import register_local_model
 
 _BACKEND_HELP = "Retrieval backend: bm25 or vector."
@@ -258,6 +260,60 @@ def create_answer_draft(
         draft = build_answer_draft(package, claims, limitations=limitations)
         write_answer_draft(draft, output)
         typer.echo(draft.model_dump_json(indent=2))
+    except (ValueError, OSError) as exc:
+        _error(exc)
+
+
+@knowledge_app.command("conflict")
+def annotate_conflict(
+    draft: Path = typer.Option(..., "--draft", exists=True, dir_okay=False),
+    evidence: Path = typer.Option(..., "--evidence", exists=True, dir_okay=False),
+    output: Path = typer.Option(..., "--output"),
+    citation_ids: str = typer.Option(..., "--citation-ids", help="Comma-separated E# ids (at least two)."),
+    description: str = typer.Option(..., "--description"),
+    conflict_id: str | None = typer.Option(None, "--conflict-id"),
+) -> None:
+    """Annotate conflicting evidence; the resulting artifact remains draft_only."""
+    try:
+        package = EvidencePackage.model_validate_json(evidence.read_bytes())
+        current = AnswerDraft.model_validate_json(draft.read_bytes())
+        updated = annotate_answer_draft_conflict(
+            current,
+            package,
+            citation_ids=[item.strip() for item in citation_ids.split(",") if item.strip()],
+            description=description,
+            conflict_id=conflict_id,
+        )
+        write_answer_draft(updated, output)
+        typer.echo(updated.model_dump_json(indent=2))
+    except (ValueError, OSError) as exc:
+        _error(exc)
+
+
+@knowledge_app.command("review")
+def review_answer_draft(
+    draft: Path = typer.Option(..., "--draft", exists=True, dir_okay=False),
+    evidence: Path = typer.Option(..., "--evidence", exists=True, dir_okay=False),
+    output: Path = typer.Option(..., "--output"),
+    reviewer: str = typer.Option(..., "--reviewer"),
+    decision: str = typer.Option(..., "--decision"),
+    notes: str | None = typer.Option(None, "--notes"),
+    resolve_conflict_id: list[str] = typer.Option([], "--resolve-conflict-id"),
+) -> None:
+    """Record a human review decision without enabling execution."""
+    try:
+        package = EvidencePackage.model_validate_json(evidence.read_bytes())
+        current = AnswerDraft.model_validate_json(draft.read_bytes())
+        updated = record_answer_draft_review(
+            current,
+            package,
+            reviewer=reviewer,
+            decision=decision,
+            notes=notes,
+            resolved_conflict_ids=resolve_conflict_id,
+        )
+        write_answer_draft(updated, output)
+        typer.echo(updated.model_dump_json(indent=2))
     except (ValueError, OSError) as exc:
         _error(exc)
 

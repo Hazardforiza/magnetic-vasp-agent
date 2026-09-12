@@ -12,12 +12,21 @@ from magnetic_vasp_agent.knowledge.models import (
     RagEvaluationCase,
 )
 from magnetic_vasp_agent.knowledge.retrieval import (
+    annotate_answer_draft_conflict,
+    annotate_answer_draft_conflicts,
     build_answer_draft,
     evidence_package_sha256,
+    record_answer_draft_review,
+    review_answer_draft,
     validate_answer_draft,
     write_answer_draft,
 )
-from magnetic_vasp_agent.knowledge.retrieval_models import AnswerDraft, EvidencePackage
+from magnetic_vasp_agent.knowledge.retrieval_models import (
+    AnswerDraft,
+    AnswerDraftReview,
+    EvidenceConflict,
+    EvidencePackage,
+)
 from magnetic_vasp_agent.knowledge.wiki import capture_wiki, verify_wiki_capture
 from magnetic_vasp_agent.knowledge.wiki_models import WikiCaptureManifest, WikiChunk
 
@@ -27,6 +36,8 @@ __all__ = [
     "KnowledgeSource",
     "EvidencePackage",
     "AnswerDraft",
+    "EvidenceConflict",
+    "AnswerDraftReview",
     "RagEvaluationCase",
     "WikiCaptureManifest",
     "WikiChunk",
@@ -36,6 +47,10 @@ __all__ = [
     "verify_wiki_capture",
     "write_inventory",
     "build_answer_draft",
+    "annotate_answer_draft_conflict",
+    "annotate_answer_draft_conflicts",
+    "record_answer_draft_review",
+    "review_answer_draft",
     "evidence_package_sha256",
     "validate_answer_draft",
     "write_answer_draft",

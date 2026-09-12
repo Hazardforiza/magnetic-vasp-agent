@@ -4,8 +4,10 @@ from typer.testing import CliRunner
 
 from magnetic_vasp_agent.cli import app
 from magnetic_vasp_agent.knowledge.retrieval import (
+    annotate_answer_draft_conflict,
     build_answer_draft,
     evidence_package_sha256,
+    record_answer_draft_review,
     validate_answer_draft,
 )
 from magnetic_vasp_agent.knowledge.retrieval_models import (
@@ -134,3 +136,46 @@ def test_knowledge_draft_cli_writes_review_only_artifact(tmp_path):
     )
     assert repeated.exit_code == 2
     assert "answer draft exists" in repeated.output
+
+
+def test_conflict_annotation_and_review_remain_non_executable():
+    package = evidence_package()
+    package = package.model_copy(update={
+        "citations": [
+            package.citations[0],
+            package.citations[0].model_copy(update={"citation_id": "E2", "quote": "A different rule."}),
+        ]
+    })
+    draft = build_answer_draft(package, ["Use the documented rule. [E1] [E2]"])
+    annotated = annotate_answer_draft_conflict(
+        draft, package, citation_ids=["E1", "E2"], description="Sources disagree on applicability."
+    )
+    assert annotated.status == "review_required"
+    assert annotated.conflicts[0].conflict_id == "CF1"
+    assert annotated.review.status == "review_required"
+    reviewed = record_answer_draft_review(
+        annotated, package, reviewer="alice", decision="needs_revision",
+        notes="Check target VASP version.",
+    )
+    assert reviewed.review.status == "reviewed"
+    assert reviewed.review.decision == "needs_revision"
+    assert reviewed.allowed_action == "draft_only"
+
+
+def test_conflict_resolution_requires_notes_and_known_ids():
+    package = evidence_package()
+    package = package.model_copy(update={
+        "citations": [package.citations[0], package.citations[0].model_copy(update={"citation_id": "E2"})]
+    })
+    draft = annotate_answer_draft_conflict(
+        build_answer_draft(package, ["Claim [E1] [E2]"]), package,
+        citation_ids=["E1", "E2"], description="Conflict",
+    )
+    with pytest.raises(ValueError, match="resolving conflicts requires review notes"):
+        record_answer_draft_review(
+            draft, package, reviewer="alice", decision="accepted", resolved_conflict_ids=["CF1"]
+        )
+    with pytest.raises(ValueError, match="unknown conflict"):
+        record_answer_draft_review(
+            draft, package, reviewer="alice", decision="accepted", notes="Resolved", resolved_conflict_ids=["CF9"]
+        )
