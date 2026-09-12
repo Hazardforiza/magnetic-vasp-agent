@@ -14,6 +14,7 @@ from magnetic_vasp_agent.knowledge.models import (
 from magnetic_vasp_agent.knowledge.retrieval import (
     annotate_answer_draft_conflict,
     annotate_answer_draft_conflicts,
+    build_answer_response,
     build_answer_draft,
     evidence_package_sha256,
     record_answer_draft_review,
@@ -23,6 +24,8 @@ from magnetic_vasp_agent.knowledge.retrieval import (
 )
 from magnetic_vasp_agent.knowledge.retrieval_models import (
     AnswerDraft,
+    AnswerRequest,
+    AnswerResponse,
     AnswerDraftReview,
     EvidenceConflict,
     EvidencePackage,
@@ -36,6 +39,8 @@ __all__ = [
     "KnowledgeSource",
     "EvidencePackage",
     "AnswerDraft",
+    "AnswerRequest",
+    "AnswerResponse",
     "EvidenceConflict",
     "AnswerDraftReview",
     "RagEvaluationCase",
@@ -47,6 +52,7 @@ __all__ = [
     "verify_wiki_capture",
     "write_inventory",
     "build_answer_draft",
+    "build_answer_response",
     "annotate_answer_draft_conflict",
     "annotate_answer_draft_conflicts",
     "record_answer_draft_review",

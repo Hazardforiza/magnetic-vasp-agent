@@ -308,6 +308,41 @@ class AnswerDraft(StrictModel):
         return self
 
 
+class AnswerRequest(StrictModel):
+    """Offline, structured request for the retrieval-to-draft pipeline."""
+
+    schema_version: Literal[1] = 1
+    question: str = Field(min_length=1)
+    claims: list[str] = Field(min_length=1)
+    limitations: list[str] = Field(default_factory=list)
+    backend: Literal["bm25", "vector"] = "bm25"
+    filters: RetrievalFilter = Field(default_factory=RetrievalFilter)
+    required_source_types: list[KnowledgeSourceType] = Field(default_factory=list)
+    limit: int = Field(default=5, ge=1, le=100)
+
+
+class AnswerResponse(StrictModel):
+    """Result of the offline answer pipeline; never an executable command."""
+
+    schema_version: Literal[1] = 1
+    question: str = Field(min_length=1)
+    evidence_package: EvidencePackage
+    draft: AnswerDraft
+    status: Literal["review_required", "draft_ready_for_review"]
+    human_review_required: Literal[True] = True
+    allowed_action: Literal["draft_only"] = "draft_only"
+
+    @model_validator(mode="after")
+    def response_contract(self) -> AnswerResponse:
+        if self.question != self.evidence_package.question or self.question != self.draft.question:
+            raise ValueError("answer response question does not match nested artifacts")
+        if self.draft.allowed_action != "draft_only" or self.evidence_package.allowed_action != "draft_only":
+            raise ValueError("answer response must remain draft_only")
+        if self.status != self.draft.status:
+            raise ValueError("answer response status does not match draft status")
+        return self
+
+
 class EvaluationCaseResult(StrictModel):
     case_id: str
     query: str

@@ -21,6 +21,7 @@ from magnetic_vasp_agent.knowledge.models import (
 )
 from magnetic_vasp_agent.knowledge.retrieval import (
     annotate_answer_draft_conflict,
+    build_answer_response,
     build_answer_draft,
     build_bm25_index,
     build_evidence_package,
@@ -33,7 +34,7 @@ from magnetic_vasp_agent.knowledge.retrieval import (
     write_evidence_package,
     write_answer_draft,
 )
-from magnetic_vasp_agent.knowledge.retrieval_models import AnswerDraft, EvidencePackage, RetrievalFilter
+from magnetic_vasp_agent.knowledge.retrieval_models import AnswerDraft, AnswerRequest, EvidencePackage, RetrievalFilter
 from magnetic_vasp_agent.knowledge.embedding import register_local_model
 
 _BACKEND_HELP = "Retrieval backend: bm25 or vector."
@@ -261,6 +262,49 @@ def create_answer_draft(
         write_answer_draft(draft, output)
         typer.echo(draft.model_dump_json(indent=2))
     except (ValueError, OSError) as exc:
+        _error(exc)
+
+
+@knowledge_app.command("answer")
+def create_answer_response(
+    index: Path = typer.Option(..., "--index", exists=True, file_okay=False),
+    question: str = typer.Option(..., "--question"),
+    output: Path = typer.Option(..., "--output"),
+    claims: list[str] = typer.Option([], "--claim", help="Technical claim with literal [E#] markers."),
+    limitations: list[str] = typer.Option([], "--limitation"),
+    limit: int = typer.Option(5, "--limit", min=1, max=100),
+    backend: str = typer.Option("bm25", "--backend", help=_BACKEND_HELP),
+    required_source_types: str = typer.Option("", "--required-source-types"),
+    tasks: str = typer.Option("", "--tasks"),
+    magnetic_modes: str = typer.Option("", "--magnetic-modes"),
+    validated_only: bool = typer.Option(False, "--validated-only"),
+    human_review: bool = typer.Option(False, "--human-review"),
+    model_dir: Path | None = typer.Option(None, "--model-dir", exists=True, file_okay=False, help=_MODEL_DIR_HELP),
+) -> None:
+    """Run offline retrieval and produce a structured, review-only answer response."""
+    try:
+        required = _parse_enum_list(required_source_types, KnowledgeSourceType)
+        request = AnswerRequest(
+            question=question,
+            claims=claims,
+            limitations=limitations,
+            backend=backend,
+            filters=RetrievalFilter(
+                source_types=_parse_enum_list(required_source_types, KnowledgeSourceType),
+                tasks=_parse_enum_list(tasks, CalculationTask),
+                magnetic_modes=_parse_enum_list(magnetic_modes, MagneticMode),
+                validated_only=validated_only,
+            ),
+            required_source_types=required,
+            limit=limit,
+        )
+        response = build_answer_response(request, index, model_dir=model_dir, human_review_requested=human_review)
+        if output.exists() or output.is_symlink():
+            raise FileExistsError("answer response exists; choose a new output path")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(response.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        typer.echo(response.model_dump_json(indent=2))
+    except (ValueError, OSError, RuntimeError) as exc:
         _error(exc)
 
 

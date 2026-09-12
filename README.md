@@ -612,7 +612,7 @@ uv run --frozen magvasp knowledge evaluate `
 
 ## 当前 RAG 下一步
 
-第 10.8 步已完成：在保持 `draft_only` 的前提下加入回答草稿的人工审核工作流和冲突标注，仍不连接真实集群。回答草稿只能引用证据包中存在的编号，缺失、冲突或未验证证据时保持人工审核状态。后续可在此基础上补充更细的冲突检测规则，但不能绕过人工审核或远程执行边界。
+第 10.8 步已完成：在保持 `draft_only` 的前提下加入回答草稿的人工审核工作流和冲突标注，仍不连接真实集群。回答草稿只能引用证据包中存在的编号，缺失、冲突或未验证证据时保持人工审核状态。第 10.9 步增加了离线结构化问答协议，将检索、证据包和草稿组合为单一响应对象；它仍不调用 LLM、不执行远程动作，也不产生可执行状态。
 
 ## 第 10.7 步：带引用的回答草稿
 
@@ -649,3 +649,18 @@ uv run --frozen magvasp knowledge review `
 ```
 
 冲突和审核字段都属于可审计元数据；证据包哈希、问题绑定、引用完整性和防覆盖写入校验仍然生效。
+
+## 第 10.9 步：结构化离线问答协议
+
+`AnswerRequest` 和 `AnswerResponse` 为未来 Agent 适配器定义稳定边界。`knowledge answer` 在本地串联检索、证据包和 `[E#]` 回答草稿，并把三者写入一个不可覆盖的 JSON 工件：
+
+```powershell
+uv run --frozen magvasp knowledge answer `
+  --index var\knowledge\bm25-20260908-r2 `
+  --question "如何设置非共线计算的初始磁矩？" `
+  --claim "初始磁矩应为每个原子提供三个分量。[E1]" `
+  --required-source-types official `
+  --output var\knowledge\answers\noncollinear.json
+```
+
+响应的 `status` 只允许 `draft_ready_for_review` 或 `review_required`，并固定 `allowed_action=draft_only`。该协议不接受任意 shell、SSH、MPI 或 VASP 参数作为输入。

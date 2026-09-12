@@ -11,6 +11,8 @@ from magnetic_vasp_agent.knowledge.retrieval import (
     validate_answer_draft,
 )
 from magnetic_vasp_agent.knowledge.retrieval_models import (
+    AnswerRequest,
+    AnswerResponse,
     CitedEvidence,
     EvidencePackage,
     RetrievalFilter,
@@ -175,6 +177,23 @@ def test_conflict_resolution_requires_notes_and_known_ids():
         record_answer_draft_review(
             draft, package, reviewer="alice", decision="accepted", resolved_conflict_ids=["CF1"]
         )
+
+
+def test_structured_answer_response_contract_is_review_only():
+    package = evidence_package()
+    draft = build_answer_draft(package, ["Set initial moments. [E1]"])
+    response = AnswerResponse(
+        question=package.question,
+        evidence_package=package,
+        draft=draft,
+        status=draft.status,
+    )
+    assert response.allowed_action == "draft_only"
+    assert response.human_review_required is True
+    request = AnswerRequest(question=package.question, claims=["Set initial moments. [E1]"])
+    assert request.backend == "bm25"
+    with pytest.raises(ValidationError):
+        AnswerRequest(question=package.question, claims=[])
     with pytest.raises(ValueError, match="unknown conflict"):
         record_answer_draft_review(
             draft, package, reviewer="alice", decision="accepted", notes="Resolved", resolved_conflict_ids=["CF9"]

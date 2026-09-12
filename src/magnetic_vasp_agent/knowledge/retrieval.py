@@ -24,6 +24,8 @@ from magnetic_vasp_agent.knowledge.retrieval_models import (
     AnswerDraftClaim,
     AnswerDraftReviewReason,
     AnswerDraftReview,
+    AnswerRequest,
+    AnswerResponse,
     EvidenceConflict,
     CitationIntegrity,
     CITATION_MARKER_PATTERN,
@@ -898,6 +900,44 @@ def build_answer_draft(
         citation_integrity=integrity,
         status="draft_ready_for_review" if integrity.citation_complete and package.status == "evidence_ready" else "review_required",
         review_reasons=reasons,
+    )
+
+
+def build_answer_response(
+    request: AnswerRequest,
+    index: Path,
+    *,
+    model_dir: Path | None = None,
+    human_review_requested: bool = False,
+) -> AnswerResponse:
+    """Run the deterministic offline retrieval-to-draft pipeline.
+
+    This is the structured boundary intended for a future agent adapter. It
+    performs no network access, model API calls, file uploads, or execution.
+    """
+    filters = request.filters
+    if request.required_source_types:
+        filters = filters.model_copy(update={"source_types": request.required_source_types})
+    if request.backend == "bm25":
+        if model_dir is not None:
+            raise ValueError("model_dir requires vector backend")
+        retrieval = search_bm25(index, request.question, filters, request.limit)
+    else:
+        retrieval = search_vector(
+            index, request.question, filters, request.limit, model_dir=model_dir
+        )
+    package = build_evidence_package(
+        retrieval,
+        backend=request.backend,
+        required_source_types=request.required_source_types,
+        human_review_requested=human_review_requested,
+    )
+    draft = build_answer_draft(package, request.claims, limitations=request.limitations)
+    return AnswerResponse(
+        question=request.question,
+        evidence_package=package,
+        draft=draft,
+        status=draft.status,
     )
 
 
