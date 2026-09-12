@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from magnetic_vasp_agent.agent.approval import ApprovalPolicy
 from magnetic_vasp_agent.agent.graph import (
+    _strip_sentinels,
     langgraph_available,
     run_goal,
 )
@@ -24,6 +25,15 @@ def _config() -> LlmConfig:
         base_url="https://gateway.example.com/v1",
         api_key_env="MAGVASP_TEST_KEY",
     )
+
+
+def test_strip_sentinels_removes_trailing_markers_only() -> None:
+    assert _strip_sentinels("mesh summary <CPA_DONE>") == "mesh summary"
+    assert _strip_sentinels("done <|end|>") == "done"
+    assert _strip_sentinels("done <CPA_DONE> <|end|>") == "done"
+    # Ordinary prose and mid-text angle brackets are untouched.
+    assert _strip_sentinels("use a < b comparison") == "use a < b comparison"
+    assert _strip_sentinels("value <T1> is used here") == "value <T1> is used here"
 
 
 # --------------------------------------------------------------------------- #

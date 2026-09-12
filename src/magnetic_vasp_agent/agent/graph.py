@@ -18,6 +18,7 @@ boundary.
 from __future__ import annotations
 
 import operator
+import re
 import uuid
 from pathlib import Path
 from typing import Annotated, Any, TypedDict
@@ -296,11 +297,29 @@ def _build_transcript(goal: str, state: dict[str, Any]) -> AgentTranscript:
     )
 
 
+_SENTINEL_RE = re.compile(r"\s*(?:<\|[^>]*\|>|<[A-Z0-9_]+>)\s*$")
+
+
+def _strip_sentinels(text: str) -> str:
+    """Drop trailing end-of-turn sentinels some proxies/models append.
+
+    Only removes a sentinel token anchored at the very end (e.g. ``<CPA_DONE>``
+    or ``<|end|>``); ordinary prose and mid-text angle brackets are untouched.
+    """
+
+    previous = None
+    while previous != text:
+        previous = text
+        text = _SENTINEL_RE.sub("", text)
+    return text.rstrip()
+
+
 def _last_ai_text(state: dict[str, Any]) -> str:
     for message in reversed(state.get("messages", [])):
         content = getattr(message, "content", None)
         if content and not getattr(message, "tool_calls", None):
-            return content if isinstance(content, str) else str(content)
+            text = content if isinstance(content, str) else str(content)
+            return _strip_sentinels(text)
     return ""
 
 
