@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "provider": "openai_compatible",
+  "model": "openai/deepseek-chat",
+  "base_url": "https://api.deepseek.com/v1",
+  "api_key_env": "MAGVASP_LLM_API_KEY",
+  "temperature": 0.0,
+  "timeout_seconds": 60.0,
+  "max_tool_calls": 12
+}

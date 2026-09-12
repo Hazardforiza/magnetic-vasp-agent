@@ -6,9 +6,9 @@
 
 ## 当前进度
 
-已完成第 1–9 步的本地确定性内核。RAG 方向已完成第 10.1–10.6 步：知识治理与 20 题评测集、9 个 VASP Wiki 页面/58 个可追溯 chunk、74 文档 BM25 基线、本地 Qdrant 混合检索、离线多语言 MiniLM embedding，以及只允许 `draft_only` 的类型化证据包。当前尚未接入 LLM API，证据包也不能自动修改 VASP 输入或触发远程执行。
+已完成第 1–9 步的本地确定性内核。RAG 方向已完成第 10.1–10.9 步：知识治理与 20 题评测集、9 个 VASP Wiki 页面/58 个可追溯 chunk、74 文档 BM25 基线、本地 Qdrant 混合检索、离线多语言 MiniLM embedding、只允许 `draft_only` 的类型化证据包、带 `[E#]` 引用的回答草稿、冲突标注与人工审核记录，以及结构化离线问答协议。第 11 步新增了一个框架无关、可完全离线测试的 Agent 工具协议与分级审批状态机，把确定性内核暴露为类型化工具，并提供可选的 LangGraph 编排（OpenAI 兼容后端）把自然语言目标转成经校验的工具调用链，其中 `cluster_plan` 的人工批准用 LangGraph 的 `interrupt` 做成真正的人在环。集群执行仍保持硬禁用，LLM 永远不能发任意 shell。
 
-当前分支为 `codex/bootstrap`，HEAD 为 `a23149f test: cover answer draft cli`，第 10.1–10.7 步已提交。最近一次全量测试为 **464 passed, 1 skipped**；`git diff --check` 通过。本机当前环境没有安装 Ruff，因此不能把本轮 Ruff 检查写成已通过。当前仍是“本地生成与审查阶段”：尚未连接或上传到真实集群，尚未启动/取消/重试 VASP，也尚未实现 VASP 输出后处理。
+第 10.1–10.9 步已提交（见下方提交历史）。第 11 步的 Agent 层代码已加入工作区，新增 `tests/test_agent_{tools,approval,runner,graph}.py` 四组测试。在本机安装可选 `agent` extra（LangGraph）后 4 组共 32 用例(其中 1 个仅在未装 LangGraph 时运行)已实测通过,LangGraph 的 tool-calling 与 `interrupt`/`resume` 人在环流程用假 chat model 完全离线验证。本机当前环境没有安装 Ruff，因此不能把本轮 Ruff 检查写成已通过。`tests/test_knowledge.py::test_knowledge_search_help_describes_local_model_requirement` 在当前 Windows 控制台的帮助文本换行/编码下会失败，该失败在未改动的 HEAD 上同样出现，与本轮 Agent 改动无关。当前仍是“本地生成与审查阶段”：尚未连接或上传到真实集群，尚未启动/取消/重试 VASP，也尚未实现 VASP 输出后处理。
 
 `mcif/` 和 `vasp笔记/` 是用户原始资料目录，目前保持未跟踪状态，不属于本轮功能提交，也不应被自动修改或提交。
 
@@ -472,7 +472,7 @@ uv run --frozen magvasp knowledge capture-wiki `
 | 未执行 | 在 `cu21`–`cu50` 白名单节点运行 MPI smoke test | 没有验证 Intel MPI 的单节点隔离、绑定和实际 VASP 可执行文件。 |
 | 未执行 | 启动、监控、取消、重试真实 VASP | 当前没有真实 `launch`/`cancel`/`retry` 实现；也没有触碰 `cu21` 上已有计算。 |
 | 未执行 | 解析 `OUTCAR`/`vasprun.xml`/DOS/局域磁矩并比较磁序 | VASP 后处理模块尚未开发。 |
-| 未执行 | 接入 CrewAI、MCP、LLM API | 当前是可被 Agent 调用的确定性内核，不是已经运行的多智能体系统。 |
+| 部分执行 | 接入 LLM/编排框架 | 第 11 步加入可选的 LangGraph 绑定（OpenAI 兼容后端）与工具协议/审批状态机；核心仍是确定性内核，未接入 MCP，也未在真实端点上跑通完整多轮规划。 |
 
 ## 集群真实约束
 
@@ -513,7 +513,7 @@ cu21 cu22 cu23 cu41 cu42 cu43 cu48 cu49 cu50
 - 尚未验证 Intel MPI 在单个白名单节点上的隔离、CPU 绑定、环境模块和 VASP 可执行文件路径。
 - 尚未实现真实 `launch`、异步状态监控、`cancel` 和受控 `retry`；当前仅有预检、计划、模拟和传输。
 - 尚未开发 VASP 后处理：总能量、逐原子局域磁矩、总磁矩、自旋分辨 DOS、收敛状态、不同磁序能量比较和结构化报告都待实现。
-- 尚未接入 LLM/CrewAI/MCP。官方 Wiki 已完成受控正文抽取和可追溯切块，BM25/Qdrant 混合检索、20 题离线评测和本地 MiniLM semantic embedding 已完成第一版；下一阶段定义 Agent 的结构化工具协议与审批状态机。不能让 LLM 直接执行 SSH shell。
+- Agent 的结构化工具协议与审批状态机已在第 11 步完成，并加入可选的 LangGraph 编排（OpenAI 兼容后端）；仍未接入 MCP，也未在真实 LLM 端点上跑通完整多轮规划。官方 Wiki 已完成受控正文抽取和可追溯切块，BM25/Qdrant 混合检索、20 题离线评测和本地 MiniLM semantic embedding 已完成第一版。不能让 LLM 直接执行 SSH shell。
 - mCIF 的一般声明 BNS 与完整磁群身份自动核验、一般非共线纹理的物理旋转/MAE 契约、真实收敛测试仍未完成。
 
 当前已转向专业 VASP Agent/RAG 路线。第 10.3 步已经建立 BM25 基线并完成 20 题离线评测；第 10.4 步加入本地 Qdrant 向量索引、确定性哈希 embedding 和 BM25+向量 RRF 融合；第 10.6 步完成固定 revision 的本地 MiniLM embedding 及同题集对比。下一步定义带引用的 RAG 问答接口。真实 SSH、MPI smoke test、launch/monitor 和 OUTCAR/vasprun.xml 后处理仍保持禁用，待知识与工具边界稳定后按人工批准逐项推进。
@@ -664,3 +664,37 @@ uv run --frozen magvasp knowledge answer `
 ```
 
 响应的 `status` 只允许 `draft_ready_for_review` 或 `review_required`，并固定 `allowed_action=draft_only`。该协议不接受任意 shell、SSH、MPI 或 VASP 参数作为输入。
+
+## 第 11 步：Agent 工具协议、审批状态机与 LangGraph 编排
+
+第 11 步把前面全部确定性内核暴露为一组类型化、可审计的工具，供 LLM Agent 调用。协议层、审批状态机与 runner 都不依赖任何 LLM SDK 或网络，可完全离线测试；真实 LLM 路径由可选的 LangGraph 绑定（OpenAI 兼容后端）提供。完整说明见 [`docs/agent/tool_protocol.md`](docs/agent/tool_protocol.md) 与 [`docs/agent/approval.md`](docs/agent/approval.md)。
+
+分层：`agent/tool_models.py`（协议与 SHA256 溯源类型）、`agent/tools.py`（工具注册表）、`agent/approval.py`（分级审批）、`agent/runner.py`（`AgentPlan` → `AgentTranscript`）、`agent/llm_config.py`（密钥只从环境变量读的 LLM 配置）、`agent/graph.py`（仅在安装 `langgraph`/`langchain` 时可用的薄绑定）。
+
+选用 LangGraph 而非 CrewAI 的原因：本项目的“智能”很窄——把目标翻译成一串受门控的类型化工具调用；LangGraph 的图 + `interrupt` 模型与已有的审批状态机同构,`cluster_plan` 的“等人工批准”就是一个 `interrupt` 节点,人在环是一等公民,依赖也比 CrewAI 轻。核心四件套框架无关,换编排只动 `agent/graph.py`、`agent chat` 命令与可选 extra;审批/校验/溯源逻辑不变。
+
+### 硬边界
+
+- LLM 只能调用注册表里的工具；不接受任何自由格式的 shell/SSH/MPI 字符串。工具参数先过类型化 `StrictModel`，输出仍过现有确定性校验器。
+- 风险分四级：`read_only` 自动放行；`local_write` 放行但记录；`cluster_plan`（仅 `execution.transfer_plan`，无 `--connect`）需显式人工批准且必须有具名 approver（LangGraph 路径下用 `interrupt` 暂停等批准）；`cluster_execute`（launch/cancel/retry）永不注册、始终硬阻塞。
+- `AgentTranscript` 固定 `cluster_execution="disabled"`、`human_review_required=True`。POTCAR 内容不进入任何工具结果或发给 LLM；`potcar.build` 只返回 manifest。
+- API key 只从环境变量（默认 `MAGVASP_LLM_API_KEY`）读取，绝不写入配置文件、日志或提交到 Git，也不发往集群。
+
+### 命令示例
+
+```powershell
+# 列出全部工具与风险分级（只读，无 LLM）
+uv run --frozen magvasp agent tools
+
+# 跑手写/类型化计划（无 LLM，完全确定性、可审计）
+uv run --frozen magvasp agent run-plan --plan plan.json
+
+# 真实 LangGraph 路径（需 agent extra + 网络 + API key）
+uv sync --extra dev --extra agent --frozen
+$env:MAGVASP_LLM_API_KEY = "sk-..."
+uv run --frozen magvasp agent chat `
+  --goal "为 Mn3Al 规划一次静态 SCF 输入" `
+  --config config\agent\llm.json
+```
+
+`config/agent/llm.example.json` 是不含密钥的示例配置，`api_key_env` 指向环境变量名而非密钥本身（LangGraph 路径会把配置里 `openai/<model>` 前缀去掉后传给 OpenAI 兼容客户端）。`agent chat` 产出的仍是需人工审核的 `AgentTranscript`，不代表任何计算已经执行；若命中 `cluster_plan` 会暂停并在 `pending_approvals` 中列出待批准调用。第 11 步不启用真实集群访问，也不实现 VASP 后处理。

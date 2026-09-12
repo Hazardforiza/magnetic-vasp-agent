@@ -9,6 +9,7 @@ import pydantic
 import typer
 
 from magnetic_vasp_agent import __version__
+from magnetic_vasp_agent.agent_cli import agent_app
 from magnetic_vasp_agent.cli_io import Utf8TyperGroup
 from magnetic_vasp_agent.execution_cli import execution_app
 from magnetic_vasp_agent.incar import (
@@ -58,6 +59,7 @@ app.add_typer(workflow_app, name="workflow")
 app.add_typer(mcif_app, name="mcif")
 app.add_typer(execution_app, name="execution")
 app.add_typer(knowledge_app, name="knowledge")
+app.add_typer(agent_app, name="agent")
 
 
 @app.command()

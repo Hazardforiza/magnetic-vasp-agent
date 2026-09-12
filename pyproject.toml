@@ -24,6 +24,11 @@ rag = [
 semantic = [
     "fastembed>=0.8,<1",
 ]
+agent = [
+    "langgraph>=0.2,<1",
+    "langchain-core>=0.3,<1",
+    "langchain-openai>=0.2,<1",
+]
 
 [project.scripts]
 magvasp = "magnetic_vasp_agent.cli:app"

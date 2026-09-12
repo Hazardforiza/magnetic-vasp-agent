@@ -11,6 +11,9 @@ var/*
 !var/.gitkeep
 runs/
 
+# Local LLM config (only the example is tracked; the real one is user-specific)
+config/agent/llm.json
+
 # Licensed VASP data and large calculation artifacts
 POTCAR
 POTCAR.*
