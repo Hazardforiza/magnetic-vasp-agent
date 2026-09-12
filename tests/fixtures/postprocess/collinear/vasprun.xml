@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<modeling>
+ <generator>
+  <i name="program" type="string">vasp </i>
+  <i name="version" type="string">5.4.4.18Apr17-6-g9f103f2a35  </i>
+ </generator>
+ <parameters>
+  <separator name="electronic">
+   <i type="int" name="ISPIN">     2</i>
+   <i type="int" name="NELM">   300</i>
+  </separator>
+  <separator name="ionic">
+   <i type="int" name="NSW">     0</i>
+  </separator>
+  <separator name="electronic spin">
+   <i type="logical" name="LNONCOLLINEAR"> F  </i>
+   <i type="logical" name="LSORBIT"> F  </i>
+  </separator>
+ </parameters>
+ <calculation>
+  <scstep>
+   <energy>
+    <i name="e_fr_energy">    896.73472921 </i>
+   </energy>
+  </scstep>
+  <scstep>
+   <energy>
+    <i name="e_fr_energy">    -35.13619563 </i>
+   </energy>
+  </scstep>
+  <energy>
+   <i name="e_fr_energy">    -35.13619563 </i>
+   <i name="e_wo_entrp">    -35.13619563 </i>
+   <i name="e_0_energy">    -35.13619563 </i>
+  </energy>
+  <dos>
+   <i name="efermi">      7.52810000 </i>
+   <total>
+    <array>
+     <dimension dim="1">gridpoints</dimension>
+     <field>energy</field>
+     <field>total</field>
+     <field>integrated</field>
+     <set>
+      <set comment="spin 1">
+       <r>     6.00000     0.00000     0.00000 </r>
+       <r>     7.00000     0.40000     0.40000 </r>
+       <r>     7.50000     0.60000     1.00000 </r>
+       <r>     8.00000     0.50000     1.50000 </r>
+       <r>     9.00000     0.00000     1.50000 </r>
+      </set>
+      <set comment="spin 2">
+       <r>     6.00000     0.00000     0.00000 </r>
+       <r>     7.00000     0.40000     0.40000 </r>
+       <r>     7.50000     0.60000     1.00000 </r>
+       <r>     8.00000     0.50000     1.50000 </r>
+       <r>     9.00000     0.00000     1.50000 </r>
+      </set>
+     </set>
+    </array>
+   </total>
+  </dos>
+ </calculation>
+</modeling>

@@ -24,4 +24,7 @@ CHGCAR
 CHG
 vasprun.xml
 OUTCAR
+# Keep the compact, trimmed post-processing test fixtures (not real bulk data).
+!tests/fixtures/postprocess/**/OUTCAR
+!tests/fixtures/postprocess/**/vasprun.xml
 

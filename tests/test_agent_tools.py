@@ -23,6 +23,7 @@ EXPECTED_TOOLS = {
     "knowledge.answer": RiskTier.READ_ONLY,
     "execution.probe": RiskTier.READ_ONLY,
     "execution.plan": RiskTier.READ_ONLY,
+    "postprocess.parse": RiskTier.READ_ONLY,
     "potcar.build": RiskTier.LOCAL_WRITE,
     "incar.build": RiskTier.LOCAL_WRITE,
     "kpoints.build": RiskTier.LOCAL_WRITE,

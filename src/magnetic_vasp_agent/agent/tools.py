@@ -68,6 +68,7 @@ from magnetic_vasp_agent.models import (
     PotentialRegistry,
 )
 from magnetic_vasp_agent.poscar import read_poscar
+from magnetic_vasp_agent.postprocess import analyze_calculation
 from magnetic_vasp_agent.potcar import (
     assemble_potcar,
     load_policy,
@@ -288,6 +289,10 @@ class ExecutionTransferPlanInput(StrictModel):
     request: str = Field(min_length=1)
 
 
+class PostprocessParseInput(StrictModel):
+    directory: str = Field(min_length=1)
+
+
 # --------------------------------------------------------------------------- #
 # Small helpers                                                                 #
 # --------------------------------------------------------------------------- #
@@ -340,6 +345,12 @@ def _retrieval_response(
 
 def _run_structure_show(data: StructureShowInput) -> dict[str, Any]:
     return read_poscar(Path(data.poscar)).model_dump(mode="json")
+
+
+def _run_postprocess_parse(data: PostprocessParseInput) -> dict[str, Any]:
+    return analyze_calculation(Path(data.directory)).model_dump(
+        mode="json", exclude_none=True
+    )
 
 
 def _run_incar_show(data: IncarShowInput) -> dict[str, Any]:
@@ -613,6 +624,18 @@ def default_registry() -> ToolRegistry:
         produces_files=False,
         input_model=StructureShowInput,
         run=lambda data: _run_structure_show(data),
+    )
+    registry.register(
+        name="postprocess.parse",
+        description=(
+            "Parse a finished calculation directory (OSZICAR/OUTCAR/vasprun.xml) "
+            "into a typed result: convergence, energy, per-ion magnetic moments, "
+            "Fermi level, and cross-checks. Read-only; no cluster access."
+        ),
+        risk_tier=RiskTier.READ_ONLY,
+        produces_files=False,
+        input_model=PostprocessParseInput,
+        run=lambda data: _run_postprocess_parse(data),
     )
     registry.register(
         name="incar.show",
