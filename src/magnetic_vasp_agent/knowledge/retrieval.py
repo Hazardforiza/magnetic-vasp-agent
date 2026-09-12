@@ -807,6 +807,16 @@ def validate_answer_draft(
     if draft.evidence_package_status != package.status:
         raise ValueError("answer draft evidence package status does not match package")
     available = [item.citation_id for item in package.citations]
+    available_set = set(available)
+    for conflict in draft.conflicts:
+        unknown_conflict_citations = [
+            item for item in conflict.citation_ids if item not in available_set
+        ]
+        if unknown_conflict_citations:
+            raise ValueError(
+                "answer draft conflict references unknown citation ids: "
+                + ", ".join(unknown_conflict_citations)
+            )
     cited = list(dict.fromkeys(citation for claim in draft.claims for citation in claim.citation_ids))
     unknown = [item for item in cited if item not in available]
     malformed: list[str] = []
