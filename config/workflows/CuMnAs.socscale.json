@@ -1,0 +1,18 @@
+{
+  "workflow_id": "CuMnAs-socscale",
+  "capabilities": {"socscale": false},
+  "scans": [
+    {
+      "kind": "socscale",
+      "base": {
+        "id": "soc", "candidate_id": "CuMnAs", "poscar": "../../tests/fixtures/CuMnAs/POSCAR",
+        "incar": {
+          "goal": {"task": "static", "magnetic_mode": "soc"}, "encut": 600,
+          "magmom": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, -6]
+        },
+        "kpoints": {"goal": {"task": "static", "magnetic_mode": "soc"}, "sampling": {"mode": "gamma", "mesh": [17, 10, 17], "comment": "CuMnAs SOCSCALE baseline"}}
+      },
+      "values": {"zero": 0, "half": 0.5, "full": 1}
+    }
+  ]
+}

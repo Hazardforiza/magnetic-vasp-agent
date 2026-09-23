@@ -1,0 +1,10 @@
+Synthetic fractional weights with tetrahedron connectivity
+4
+Reciprocal
+0 0 0 0.25 ! GAMMA
+0.5 0 0 0.25 ! X
+0 0.5 0 0.25 ! Y
+0 0 0.5 0.25 ! Z
+Tetrahedron
+1 1.0
+1 1 2 3 4

@@ -1,0 +1,5 @@
+{
+  "goal": {"task": "static", "magnetic_mode": "collinear", "xc_family": "PBE_54"},
+  "spacing": 0.15,
+  "centering": "gamma"
+}

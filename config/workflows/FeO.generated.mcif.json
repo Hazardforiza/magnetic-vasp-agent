@@ -1,0 +1,41 @@
+{
+  "workflow_id": "FeO-generated-mcif-integration",
+  "steps": [
+    {
+      "id": "candidate-01", "candidate_id": "candidate_01_FeO_BNS2_7",
+      "mcif": "../../tests/fixtures/generated_mcif/candidate_01_FeO_BNS2_7.mcif",
+      "incar": {
+        "goal": {"task": "static", "magnetic_mode": "noncollinear", "notes": "Integration baseline only: PBE without U or SOC; no convergence or stability claim."},
+        "moment_source": "mcif", "moment_mode": "preserve_cartesian", "encut": 600, "saxis": [0, 0, 1]
+      },
+      "kpoints": {
+        "goal": {"task": "static", "magnetic_mode": "noncollinear", "notes": "Integration baseline only: PBE without U or SOC; no convergence or stability claim."},
+        "spacing": 0.25, "centering": "gamma"
+      }
+    },
+    {
+      "id": "candidate-02", "candidate_id": "candidate_02_FeO_BNS2_7",
+      "mcif": "../../tests/fixtures/generated_mcif/candidate_02_FeO_BNS2_7.mcif",
+      "incar": {
+        "goal": {"task": "static", "magnetic_mode": "noncollinear", "notes": "Integration baseline only: PBE without U or SOC; no convergence or stability claim."},
+        "moment_source": "mcif", "moment_mode": "preserve_cartesian", "encut": 600, "saxis": [0, 0, 1]
+      },
+      "kpoints": {
+        "goal": {"task": "static", "magnetic_mode": "noncollinear", "notes": "Integration baseline only: PBE without U or SOC; no convergence or stability claim."},
+        "spacing": 0.25, "centering": "gamma"
+      }
+    },
+    {
+      "id": "candidate-03", "candidate_id": "candidate_03_FeO_BNS2_7",
+      "mcif": "../../tests/fixtures/generated_mcif/candidate_03_FeO_BNS2_7.mcif",
+      "incar": {
+        "goal": {"task": "static", "magnetic_mode": "noncollinear", "notes": "Integration baseline only: PBE without U or SOC; no convergence or stability claim."},
+        "moment_source": "mcif", "moment_mode": "preserve_cartesian", "encut": 600, "saxis": [0, 0, 1]
+      },
+      "kpoints": {
+        "goal": {"task": "static", "magnetic_mode": "noncollinear", "notes": "Integration baseline only: PBE without U or SOC; no convergence or stability claim."},
+        "spacing": 0.25, "centering": "gamma"
+      }
+    }
+  ]
+}

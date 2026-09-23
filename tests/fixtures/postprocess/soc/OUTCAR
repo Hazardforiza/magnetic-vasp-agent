@@ -1,0 +1,56 @@
+ vasp.5.4.4.18Apr17-6-g9f103f2a35 (build Jul 01 2018 12:00:00) complex
+
+ (trimmed OUTCAR fixture derived from a real CuMnAs SOC run)
+
+   ISPIN  =      1    spin polarized calculation?
+   LNONCOLLINEAR =      T non collinear calculations
+   LSORBIT =      T    spin-orbit coupling
+   NELM   =    300;   NELMIN=  8; NELMDL=  0     # of ELM steps
+   NSW    =      0    number of steps for IOM
+   number of dos      NEDOS =   2001   number of ions     NIONS =      6
+   NELECT =      70.0000    total number of electrons
+
+ magnetization (x)
+
+# of ion       s       p       d       tot
+------------------------------------------
+    1        0.001   0.001   0.003   0.005
+    2        0.001   0.001   0.003   0.005
+    3        0.000   0.000   0.000   0.000
+    4        0.000   0.000   0.000   0.000
+    5        0.037   0.040   3.523   3.600
+    6       -0.037  -0.040  -3.523  -3.600
+--------------------------------------------------
+tot          0.002   0.002   0.006   0.010
+
+ magnetization (y)
+
+# of ion       s       p       d       tot
+------------------------------------------
+    1        0.000   0.000   0.000   0.000
+    2        0.000   0.000   0.000   0.000
+    3        0.000   0.000   0.000   0.000
+    4        0.000   0.000   0.000   0.000
+    5        0.005   0.005   0.490   0.500
+    6       -0.005  -0.005  -0.490  -0.500
+--------------------------------------------------
+tot          0.000   0.000   0.000   0.000
+
+ magnetization (z)
+
+# of ion       s       p       d       tot
+------------------------------------------
+    1        0.000   0.000   0.000   0.000
+    2        0.000   0.000   0.000   0.000
+    3        0.000   0.000   0.000   0.000
+    4        0.000   0.000   0.000   0.000
+    5        0.001   0.001   0.098   0.100
+    6       -0.001  -0.001  -0.098  -0.100
+--------------------------------------------------
+tot          0.000   0.000   0.000   0.000
+
+ E-fermi :   7.5279     XC(G=0):  -0.0000     alpha+bet : 0.0000
+
+  free  energy   TOTEN  =       -35.24714904 eV
+  energy  without entropy=      -35.24714904  energy(sigma->0) =      -35.24714904
+ reached required accuracy - stopping structural energy minimisation

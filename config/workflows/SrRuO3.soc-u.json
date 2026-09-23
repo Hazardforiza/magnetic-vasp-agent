@@ -1,0 +1,18 @@
+{
+  "workflow_id": "SrRuO3-soc-u",
+  "steps": [
+    {
+      "id": "scf", "candidate_id": "SrRuO3", "poscar": "../../tests/fixtures/SrRuO3/POSCAR",
+      "incar": {
+        "goal": {"task": "static", "magnetic_mode": "soc"}, "encut": 600,
+        "magmom": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                   0, 0, 6, 0, 0, 6, 0, 0, 6, 0, 0, 6,
+                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "saxis": [1, 0, 0], "hubbard": {"Ru": {"l": 2, "u": 1.2, "j": 0.6}}
+      },
+      "kpoints": {"goal": {"task": "static", "magnetic_mode": "soc"}, "sampling": {"mode": "gamma", "mesh": [11, 11, 8], "comment": "SrRuO3"}}
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "family": "PBE_54",
+  "preferred": {
+    "Al": {
+      "potential": "Al",
+      "rationale": "Baseline PBE.54 choice observed in the Mn3Al reference calculation.",
+      "confidence": 0.85,
+      "evidence": ["Mn3Al_nosoc"]
+    },
+    "As": {
+      "potential": "As",
+      "rationale": "Baseline PBE.54 choice observed in the CuMnAs reference calculations.",
+      "confidence": 0.85,
+      "evidence": ["CuMnAs_vasp"]
+    },
+    "Cu": {
+      "potential": "Cu_pv",
+      "rationale": "Semicore-enabled choice observed in the CuMnAs reference calculations.",
+      "confidence": 0.85,
+      "evidence": ["CuMnAs_vasp"]
+    },
+    "Mn": {
+      "potential": "Mn_pv",
+      "rationale": "Semicore-enabled choice observed in both magnetic reference systems.",
+      "confidence": 0.9,
+      "evidence": ["Mn3Al_nosoc", "CuMnAs_vasp"]
+    },
+    "O": {
+      "potential": "O",
+      "rationale": "Baseline PBE.54 choice observed in the SrRuO3 reference calculation.",
+      "confidence": 0.85,
+      "evidence": ["mon_scf"]
+    },
+    "Ru": {
+      "potential": "Ru_pv",
+      "rationale": "Semicore-enabled choice observed in the SrRuO3 reference calculation.",
+      "confidence": 0.85,
+      "evidence": ["mon_scf"]
+    },
+    "Sr": {
+      "potential": "Sr_sv",
+      "rationale": "Semicore-enabled choice observed in the SrRuO3 reference calculation.",
+      "confidence": 0.85,
+      "evidence": ["mon_scf"]
+    }
+  }
+}

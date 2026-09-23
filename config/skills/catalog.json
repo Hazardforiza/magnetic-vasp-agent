@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "base_directory": "../..",
+  "skills": [
+    {
+      "id": "first-principles-calculation",
+      "title": "First-principles VASP stage gates",
+      "path": "release_samples/skills/first-principles-calculation",
+      "enabled": true,
+      "scripts_allowed": false,
+      "domains": ["vasp", "workflow", "acceptance"],
+      "notes": "Stage gates and evidence rules only; does not launch MPI or VASP."
+    },
+    {
+      "id": "analyze-pdf-reference",
+      "title": "Read-only literature ingest guidance",
+      "path": "release_samples/skills/analyze-pdf-reference",
+      "enabled": true,
+      "scripts_allowed": false,
+      "domains": ["literature", "reference-demo"],
+      "notes": "Placeholder guidance only; private literature files stay local."
+    }
+  ]
+}

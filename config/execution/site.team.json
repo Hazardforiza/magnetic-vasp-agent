@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "site_id": "team-example",
+  "transport": "ssh_direct_mpi",
+  "gateway_hostname": "login01",
+  "node_port": 22,
+  "allowed_nodes": [
+    "node01",
+    "node02"
+  ],
+  "vasp_module": "vasp/6.4.2-intel",
+  "mpi_path": "/opt/intel/mpi/bin/mpirun",
+  "vasp_paths": {
+    "vasp_std": "/opt/vasp/bin/vasp_std",
+    "vasp_ncl": "/opt/vasp/bin/vasp_ncl",
+    "vasp_gam": "/opt/vasp/bin/vasp_gam"
+  },
+  "connections": [
+    {
+      "id": "office",
+      "gateway": "gateway.example.org",
+      "port": 22,
+      "notes": "Illustrative office-network endpoint for the login01 SSH gateway. Replace privately for deployment; no password is stored here."
+    },
+    {
+      "id": "tunnel",
+      "gateway": "127.0.0.1",
+      "port": 2222,
+      "notes": "Illustrative local SSH tunnel on this computer. Replace privately for deployment; do not record overlay addresses or passwords."
+    }
+  ],
+  "remote_root_template": "/home/{user}/magvasp/runs",
+  "notes": [
+    "login01 is an illustrative jump-only host and must never run VASP or MPI.",
+    "There is no scheduler assumption; jobs are single-node Intel MPI on an explicitly approved example node.",
+    "Use a site-provided read-only occupancy reference as advisory evidence; it never proves allocation.",
+    "Probe the selected node immediately before launch; never signal other users.",
+    "Each member supplies their own cluster username and connection in a private identity file. Replace every example endpoint and path before enabling execution."
+  ]
+}

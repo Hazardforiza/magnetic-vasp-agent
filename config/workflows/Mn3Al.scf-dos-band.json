@@ -1,0 +1,35 @@
+{
+  "workflow_id": "Mn3Al-scf-dos-band",
+  "steps": [
+    {
+      "id": "scf", "candidate_id": "Mn3Al", "poscar": "../../tests/fixtures/Mn3Al/POSCAR",
+      "incar": {"goal": {"task": "static", "magnetic_mode": "collinear"}, "encut": 600, "magmom": [1.4, 1.4, -2.8, 0]},
+      "kpoints": {"goal": {"task": "static", "magnetic_mode": "collinear"}, "sampling": {"mode": "gamma", "mesh": [18, 18, 18], "comment": "Mn3Al"}}
+    },
+    {
+      "id": "dos", "candidate_id": "Mn3Al", "poscar": "../../tests/fixtures/Mn3Al/POSCAR",
+      "incar": {"goal": {"task": "dos", "magnetic_mode": "collinear"}, "encut": 600, "magmom": [1.4, 1.4, -2.8, 0]},
+      "kpoints": {"goal": {"task": "dos", "magnetic_mode": "collinear"}, "sampling": {"mode": "gamma", "mesh": [24, 24, 24], "comment": "Mn3Al DOS baseline"}},
+      "dependencies": [{"artifact": "CHGCAR", "from_step": "scf"}]
+    },
+    {
+      "id": "band", "candidate_id": "Mn3Al", "poscar": "../../tests/fixtures/Mn3Al/POSCAR",
+      "incar": {"goal": {"task": "band", "magnetic_mode": "collinear"}, "encut": 600, "magmom": [1.4, 1.4, -2.8, 0]},
+      "kpoints": {
+        "goal": {"task": "band", "magnetic_mode": "collinear"},
+        "sampling": {
+          "mode": "line", "comment": "Mn3Al", "coordinate_mode": "reciprocal", "points_per_segment": 40,
+          "segments": [
+            {"start": {"coordinates": [0, 0, 0], "label": "GAMMA"}, "end": {"coordinates": [0.5, 0, 0.5], "label": "X"}},
+            {"start": {"coordinates": [0.5, 0, 0.5], "label": "X"}, "end": {"coordinates": [0.625, 0.25, 0.625], "label": "U"}},
+            {"start": {"coordinates": [0.375, 0.375, 0.75], "label": "K"}, "end": {"coordinates": [0, 0, 0], "label": "GAMMA"}},
+            {"start": {"coordinates": [0, 0, 0], "label": "GAMMA"}, "end": {"coordinates": [0.5, 0.5, 0.5], "label": "L"}},
+            {"start": {"coordinates": [0.5, 0.5, 0.5], "label": "L"}, "end": {"coordinates": [0.5, 0.25, 0.75], "label": "W"}},
+            {"start": {"coordinates": [0.5, 0.25, 0.75], "label": "W"}, "end": {"coordinates": [0.5, 0, 0.5], "label": "X"}}
+          ]
+        }
+      },
+      "dependencies": [{"artifact": "CHGCAR", "from_step": "scf"}]
+    }
+  ]
+}

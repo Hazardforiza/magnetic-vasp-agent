@@ -1,0 +1,5 @@
+# Keep repository text LF so VASP input fixtures are byte-stable across platforms.
+* text=auto eol=lf
+
+# VASP POSCAR fixtures intentionally retain layout padding used by parser tests.
+tests/fixtures/**/POSCAR -whitespace

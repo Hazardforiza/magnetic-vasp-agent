@@ -1,0 +1,17 @@
+{
+  "workflow_id": "Mn3Al-mae",
+  "scans": [
+    {
+      "kind": "mae",
+      "base": {
+        "id": "mae", "candidate_id": "Mn3Al", "poscar": "../../tests/fixtures/Mn3Al/POSCAR",
+        "incar": {
+          "goal": {"task": "magnetic_anisotropy", "magnetic_mode": "soc"}, "encut": 600,
+          "magmom": [0, 0, 1.4, 0, 0, 1.4, 0, 0, -2.8, 0, 0, 0]
+        },
+        "kpoints": {"goal": {"task": "magnetic_anisotropy", "magnetic_mode": "soc"}, "sampling": {"mode": "gamma", "mesh": [18, 18, 18], "comment": "Mn3Al MAE baseline"}}
+      },
+      "axes": {"001": [0, 0, 1], "011": [0, 1, 1], "111": [1, 1, 1]}
+    }
+  ]
+}

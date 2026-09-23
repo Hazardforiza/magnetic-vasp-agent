@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "node": "node01",
+  "step_id": "candidate-01",
+  "run_id": "example-preview-01",
+  "mpi_ranks": 1,
+  "cpu_ids": null
+}

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MagVASP 工作台</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand" aria-label="MagVASP 工作台">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <span class="brand-copy"><strong>MagVASP</strong><small>计算工作台</small></span>
+      </div>
+      <nav class="main-nav" aria-label="主导航">
+        <a href="#projects" data-view="projects" class="nav-link active" aria-current="page"><span class="nav-mark" aria-hidden="true">01</span>项目</a>
+        <a href="#agent" data-view="agent" class="nav-link"><span class="nav-mark" aria-hidden="true">02</span>Agent</a>
+        <a href="#results" data-view="results" class="nav-link"><span class="nav-mark" aria-hidden="true">03</span>结果</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <a href="#settings" data-view="settings" class="nav-link"><span class="nav-mark" aria-hidden="true">04</span>环境</a>
+        <div class="connection-line"><span class="status-dot" id="sidebar-status-dot"></span><span id="sidebar-status">正在连接</span></div>
+      </div>
+    </aside>
+
+    <div class="main-shell">
+      <header class="topbar">
+        <button class="mobile-menu icon-button" id="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" title="打开导航">☰</button>
+        <div class="topbar-title" id="topbar-title">项目</div>
+        <span class="topbar-context">本机工作区</span>
+      </header>
+
+      <main id="main-content">
+        <section class="view active" id="view-projects" aria-labelledby="projects-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">WORKFLOWS</p><h1 id="projects-title">项目</h1></div>
+            <span class="page-count" id="project-count"></span>
+          </div>
+          <div class="projects-layout">
+            <div class="projects-primary">
+              <section class="section-block" aria-labelledby="new-project-title">
+                <div class="section-heading"><h2 id="new-project-title">生成输入方案</h2></div>
+                <form id="project-form" class="form-grid">
+                  <label class="field field-wide"><span>磁性结构文件</span><input id="project-file" name="file" type="file" accept=".mcif,.cif" required><small>mCIF / CIF</small></label>
+                  <label class="field"><span>任务</span><select name="task"><option value="static">静态自洽 SCF</option><option value="relax">结构弛豫</option></select></label>
+                  <label class="field"><span>截断能 (eV)</span><input name="encut" type="number" min="1" step="1" value="600" required></label>
+                  <label class="field"><span>k 点间距 (Å⁻¹)</span><input name="spacing" type="number" min="0.01" max="1" step="0.01" value="0.25" required></label>
+                  <label class="checkbox-field"><input name="include_dos" type="checkbox"><span>包含 DOS 步骤</span></label>
+                  <div class="form-actions"><button type="submit" class="button button-primary" id="project-submit">生成输入文件</button></div>
+                </form>
+                <div id="project-form-message" class="inline-message" role="status" aria-live="polite"></div>
+              </section>
+              <section class="section-block" aria-labelledby="project-list-title">
+                <div class="section-heading"><h2 id="project-list-title">输入方案</h2><button class="text-button" type="button" id="refresh-projects">刷新</button></div>
+                <div id="project-list" class="list-region" aria-live="polite"><div class="loading-line">正在读取项目...</div></div>
+              </section>
+            </div>
+            <section class="project-detail" id="project-detail" aria-labelledby="project-detail-title">
+              <div class="detail-empty"><div class="empty-glyph" aria-hidden="true">◇</div><h2 id="project-detail-title">选择一个项目</h2><p>输入文件和审核记录会显示在这里。</p></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-agent" aria-labelledby="agent-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">ASSISTANT</p><h1 id="agent-title">Agent</h1></div><span class="page-count" id="agent-config-state"></span></div>
+          <div class="agent-layout">
+            <section class="section-block" aria-labelledby="agent-goal-title">
+              <div class="section-heading"><h2 id="agent-goal-title">计算目标</h2></div>
+              <form id="agent-form">
+                <label class="field"><span>告诉 Agent 要完成的任务</span><textarea id="agent-goal" name="goal" rows="6" required placeholder="例如：根据 FeO 磁性结构生成 SCF 和 DOS 输入，并检查参数。"></textarea></label>
+                <div class="form-actions"><button type="submit" class="button button-primary" id="agent-submit">开始</button></div>
+              </form>
+              <div id="agent-form-message" class="inline-message" role="status" aria-live="polite"></div>
+            </section>
+            <section class="agent-progress" aria-labelledby="agent-run-title">
+              <div class="section-heading"><h2 id="agent-run-title">当前任务</h2><span id="agent-run-status" class="status-pill muted">未开始</span></div>
+              <div id="agent-session" class="list-region" aria-live="polite"><div class="empty-state compact"><div class="empty-glyph" aria-hidden="true">◎</div><p>暂无 Agent 任务</p></div></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-results" aria-labelledby="results-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">ANALYSIS</p><h1 id="results-title">结果</h1></div><span class="page-count" id="result-count"></span></div>
+          <div class="results-layout">
+            <div class="results-primary">
+              <section class="section-block" aria-labelledby="result-import-title">
+                <div class="section-heading"><h2 id="result-import-title">导入计算结果</h2></div>
+                <form id="result-form">
+                  <label class="field"><span>VASP 输出文件</span><input name="files" type="file" multiple required><small>OSZICAR、OUTCAR、vasprun.xml；绘图可添加 TDOS.dat、BAND.dat / REFORMATTED_BAND.dat、KLABELS</small></label>
+                  <div class="form-actions"><button type="submit" class="button button-primary" id="result-submit">分析结果</button></div>
+                </form>
+                <div id="result-form-message" class="inline-message" role="status" aria-live="polite"></div>
+              </section>
+              <section class="section-block" aria-labelledby="result-list-title">
+                <div class="section-heading"><h2 id="result-list-title">分析记录</h2><button class="text-button" type="button" id="refresh-results">刷新</button></div>
+                <div id="result-list" class="list-region" aria-live="polite"><div class="loading-line">正在读取结果...</div></div>
+              </section>
+            </div>
+            <section class="result-detail" id="result-detail" aria-labelledby="result-detail-title"><div class="detail-empty"><div class="empty-glyph" aria-hidden="true">▤</div><h2 id="result-detail-title">选择一份结果</h2><p>收敛信息与图像会显示在这里。</p></div></section>
+          </div>
+        </section>
+
+        <section class="view" id="view-settings" aria-labelledby="settings-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">LOCAL RUNTIME</p><h1 id="settings-title">环境</h1></div></div>
+          <section class="section-block settings-section" aria-labelledby="environment-title">
+            <div class="section-heading"><h2 id="environment-title">运行状态</h2><button class="text-button" type="button" id="refresh-status">重新检查</button></div>
+            <div id="environment-list" class="settings-list" aria-live="polite"><div class="loading-line">正在检查...</div></div>
+          </section>
+          <section class="section-block settings-section" aria-labelledby="access-title"><div class="section-heading"><h2 id="access-title">访问方式</h2></div><div class="setting-row"><span>服务位置</span><strong id="service-origin">本机</strong></div><div class="setting-row"><span>集群身份</span><strong>使用当前用户的本机配置</strong></div></section>
+        </section>
+      </main>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

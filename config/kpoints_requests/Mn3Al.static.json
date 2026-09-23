@@ -1,0 +1,4 @@
+{
+  "goal": {"task": "static", "magnetic_mode": "collinear", "xc_family": "PBE_54"},
+  "sampling": {"mode": "gamma", "comment": "Mn3Al", "mesh": [18, 18, 18]}
+}

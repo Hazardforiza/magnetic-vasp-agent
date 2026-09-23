@@ -1,0 +1,5 @@
+{
+  "goal": {"task": "static", "magnetic_mode": "collinear", "xc_family": "PBE_54"},
+  "encut": 600,
+  "magmom": [1.4, 1.4, -2.8, 0]
+}

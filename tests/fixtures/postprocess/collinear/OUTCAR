@@ -1,0 +1,40 @@
+ vasp.5.4.4.18Apr17-6-g9f103f2a35 (build Jul 01 2018 12:00:00) complex
+
+ (trimmed OUTCAR fixture derived from a real CuMnAs collinear SCF run)
+
+   ISPIN  =      2    spin polarized calculation?
+   LNONCOLLINEAR =      F non collinear calculations
+   LSORBIT =      F    spin-orbit coupling
+   NELM   =    300;   NELMIN=  8; NELMDL=  0     # of ELM steps
+   NSW    =      0    number of steps for IOM
+   number of dos      NEDOS =   2001   number of ions     NIONS =      6
+   NELECT =      70.0000    total number of electrons
+
+ magnetization (x)
+
+# of ion       s       p       d       tot
+------------------------------------------
+    1       -0.012   0.009  -0.003  -0.005
+    2        0.012  -0.009   0.003   0.005
+    3       -0.003   0.002  -0.023  -0.023
+    4        0.003  -0.002   0.023   0.023
+    5        0.037   0.040   3.598   3.675
+    6       -0.037  -0.040  -3.598  -3.675
+--------------------------------------------------
+tot          0.000  -0.000   0.000   0.000
+
+ E-fermi :   7.5281     XC(G=0):  -0.0000     alpha+bet : 0.0000
+
+ POSITION                                       TOTAL-FORCE (eV/Angst)
+ -----------------------------------------------------------------------------------
+      1.00000      1.00000      1.00000         0.000000      0.000000      0.100000
+      2.00000      2.00000      2.00000         0.000000      0.000000     -0.100000
+      3.00000      3.00000      3.00000         0.100000      0.000000      0.000000
+      4.00000      4.00000      4.00000        -0.100000      0.000000      0.000000
+      5.00000      5.00000      5.00000         0.000000      0.300000      0.400000
+      6.00000      6.00000      6.00000         0.000000     -0.300000     -0.400000
+ -----------------------------------------------------------------------------------
+
+  free  energy   TOTEN  =       -35.13619563 eV
+  energy  without entropy=      -35.13619563  energy(sigma->0) =      -35.13619563
+ reached required accuracy - stopping structural energy minimisation

@@ -1,0 +1,6 @@
+{
+  "goal": {"task": "static", "magnetic_mode": "soc", "xc_family": "PBE_54"},
+  "encut": 600,
+  "magmom": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, -6],
+  "saxis": [0, 0, 1]
+}

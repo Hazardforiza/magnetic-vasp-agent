@@ -1,0 +1,4 @@
+{
+  "goal": {"task": "static", "magnetic_mode": "soc", "xc_family": "PBE_54"},
+  "sampling": {"mode": "gamma", "comment": "CuMnAs", "mesh": [17, 10, 17]}
+}
