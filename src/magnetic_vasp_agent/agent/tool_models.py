@@ -15,6 +15,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CALL_ID_PATTERN = r"^T[1-9][0-9]*$"
+CONTROLLED_CLUSTER_EXECUTE_TOOLS = frozenset(
+    {
+        "execution.smoke",
+        "execution.transfer",
+        "execution.launch",
+        "execution.artifact_release",
+    }
+)
 
 
 class StrictModel(BaseModel):
@@ -120,11 +128,11 @@ class AgentPlan(StrictModel):
 
 
 class AgentTranscript(StrictModel):
-    """Auditable record of a run; never an executable command.
+    """Auditable record of a run, including narrowly gated cluster actions.
 
-    Even when local files are written (``local_write`` tier), the transcript
-    stays advisory: cluster execution is always disabled and a human review is
-    always required before anything is treated as final.
+    Cluster execution remains disabled unless a fixed controlled tool completed
+    after an explicit, named approval. Human review is always required before
+    any result is treated as final.
     """
 
     schema_version: Literal[1] = 1
@@ -133,7 +141,7 @@ class AgentTranscript(StrictModel):
     results: list[ToolResult] = Field(default_factory=list)
     approvals: list[ApprovalRecord] = Field(default_factory=list)
     status: Literal["completed", "halted"]
-    cluster_execution: Literal["disabled"] = "disabled"
+    cluster_execution: Literal["disabled", "controlled"] = "disabled"
     human_review_required: Literal[True] = True
 
     @model_validator(mode="after")
@@ -142,7 +150,63 @@ class AgentTranscript(StrictModel):
         approval_ids = [record.call_id for record in self.approvals]
         if result_ids != approval_ids:
             raise ValueError("transcript results and approvals must align by call id")
-        for result in self.results:
-            if result.risk_tier == RiskTier.CLUSTER_EXECUTE and result.status != "blocked":
-                raise ValueError("cluster_execute results must always be blocked")
+        for result, approval in zip(self.results, self.approvals, strict=True):
+            if result.risk_tier != RiskTier.CLUSTER_EXECUTE:
+                continue
+            if (
+                result.tool not in CONTROLLED_CLUSTER_EXECUTE_TOOLS
+                or approval.tool != result.tool
+            ):
+                raise ValueError(
+                    "only fixed controlled tools may produce cluster_execute results"
+                )
+            if approval.risk_tier != RiskTier.CLUSTER_EXECUTE:
+                raise ValueError("cluster_execute result risk tier does not match approval")
+            if result.status == "blocked":
+                if result.approval_state != approval.state:
+                    raise ValueError("blocked cluster_execute result must match approval state")
+                continue
+            if approval.state != ApprovalState.APPROVED or not (
+                approval.approver and approval.approver.strip()
+            ):
+                raise ValueError(
+                    "controlled cluster result requires explicit named approval"
+                )
+            if result.status == "ok" and result.approval_state != ApprovalState.EXECUTED:
+                raise ValueError(
+                    "successful controlled cluster result must be marked executed"
+                )
+
+        expected_cluster_execution = transcript_cluster_execution(
+            self.results, self.approvals
+        )
+        if self.cluster_execution != expected_cluster_execution:
+            raise ValueError(
+                "cluster_execution must be controlled only for an explicitly "
+                "approved successful controlled cluster result"
+            )
         return self
+
+
+def transcript_cluster_execution(
+    results: list[ToolResult], approvals: list[ApprovalRecord]
+) -> Literal["disabled", "controlled"]:
+    """Summarize whether this transcript contains a controlled cluster action."""
+
+    approvals_by_id = {record.call_id: record for record in approvals}
+    for result in results:
+        approval = approvals_by_id.get(result.call_id)
+        if (
+            result.tool in CONTROLLED_CLUSTER_EXECUTE_TOOLS
+            and result.risk_tier == RiskTier.CLUSTER_EXECUTE
+            and result.status == "ok"
+            and result.approval_state == ApprovalState.EXECUTED
+            and approval is not None
+            and approval.tool == result.tool
+            and approval.risk_tier == RiskTier.CLUSTER_EXECUTE
+            and approval.state == ApprovalState.APPROVED
+            and approval.approver is not None
+            and bool(approval.approver.strip())
+        ):
+            return "controlled"
+    return "disabled"

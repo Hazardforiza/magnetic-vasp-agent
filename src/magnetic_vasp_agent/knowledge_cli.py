@@ -13,6 +13,7 @@ from magnetic_vasp_agent.knowledge import (
     verify_wiki_capture,
     write_inventory,
 )
+from magnetic_vasp_agent.knowledge.embedding import register_local_model
 from magnetic_vasp_agent.knowledge.models import (
     CalculationTask,
     KnowledgeSourceType,
@@ -21,8 +22,8 @@ from magnetic_vasp_agent.knowledge.models import (
 )
 from magnetic_vasp_agent.knowledge.retrieval import (
     annotate_answer_draft_conflict,
-    build_answer_response,
     build_answer_draft,
+    build_answer_response,
     build_bm25_index,
     build_evidence_package,
     build_vector_index,
@@ -31,11 +32,15 @@ from magnetic_vasp_agent.knowledge.retrieval import (
     record_answer_draft_review,
     search_bm25,
     search_vector,
-    write_evidence_package,
     write_answer_draft,
+    write_evidence_package,
 )
-from magnetic_vasp_agent.knowledge.retrieval_models import AnswerDraft, AnswerRequest, EvidencePackage, RetrievalFilter
-from magnetic_vasp_agent.knowledge.embedding import register_local_model
+from magnetic_vasp_agent.knowledge.retrieval_models import (
+    AnswerDraft,
+    AnswerRequest,
+    EvidencePackage,
+    RetrievalFilter,
+)
 
 _BACKEND_HELP = "Retrieval backend: bm25 or vector."
 _MODEL_DIR_HELP = (

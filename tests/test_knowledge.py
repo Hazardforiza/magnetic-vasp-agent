@@ -90,7 +90,19 @@ def test_project_catalog_and_evaluation_suite_are_typed():
     catalog = KnowledgeCatalog.model_validate_json(
         (ROOT / "config" / "knowledge" / "sources.json").read_bytes()
     )
-    assert len(catalog.sources) == 17
+    assert len(catalog.sources) == 21
+    assert {source.id for source in catalog.sources} >= {
+        "reference-demo-library",
+        "agent-skill-library",
+        "team-member-setup",
+        "deterministic-cluster-site",
+        "local-member-usage",
+    }
+    assert all(
+        "config/execution/cluster.json" not in (source.path or "")
+        and "identity.json" not in (source.path or "")
+        for source in catalog.sources
+    )
     assert {source.authority for source in catalog.sources if source.source_type == "official"} == {100}
     sanitized = next(
         source

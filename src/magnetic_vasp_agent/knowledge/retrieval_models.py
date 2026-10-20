@@ -12,7 +12,6 @@ from magnetic_vasp_agent.knowledge.models import (
     StrictModel,
 )
 
-
 CITATION_MARKER_PATTERN = re.compile(r"\[(E[1-9][0-9]*)\]")
 
 

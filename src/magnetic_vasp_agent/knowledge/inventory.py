@@ -18,6 +18,15 @@ from magnetic_vasp_agent.knowledge.models import (
     SourceInventory,
 )
 
+SKIP_DIRECTORY_NAMES = {
+    ".git",
+    ".system",
+    ".venv",
+    ".pytest_cache",
+    "__pycache__",
+    "node_modules",
+}
+
 BLOCKED_EXACT_NAMES = {
     "AECCAR0",
     "AECCAR1",
@@ -143,6 +152,8 @@ def _directory_files(root: Path, extensions: set[str]) -> tuple[list[Path], list
             child = current / name
             if child.is_symlink():
                 warnings.append(f"SYMLINK_SKIPPED:{child.name}")
+            elif name in SKIP_DIRECTORY_NAMES:
+                continue
             else:
                 safe_directories.append(name)
         directory_names[:] = safe_directories

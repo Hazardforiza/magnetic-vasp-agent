@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+import threading
+import webbrowser
 from pathlib import Path
 
 import pydantic
@@ -20,8 +22,10 @@ from magnetic_vasp_agent.incar import (
 )
 from magnetic_vasp_agent.incar_models import IncarRecipeRequest
 from magnetic_vasp_agent.incar_recipes import build_incar
-from magnetic_vasp_agent.kpoints_cli import kpoints_app
 from magnetic_vasp_agent.knowledge_cli import knowledge_app
+from magnetic_vasp_agent.kpoints_cli import kpoints_app
+from magnetic_vasp_agent.lesson_cli import lesson_app
+from magnetic_vasp_agent.magnetic_analysis_cli import analysis_app
 from magnetic_vasp_agent.mcif_cli import mcif_app
 from magnetic_vasp_agent.models import (
     CalculationGoal,
@@ -40,6 +44,8 @@ from magnetic_vasp_agent.potcar import (
     select_by_policy,
     write_registry,
 )
+from magnetic_vasp_agent.research import ResearchConfig, plan_research_from_mcif
+from magnetic_vasp_agent.skill_cli import skill_app
 from magnetic_vasp_agent.workflow_cli import workflow_app
 
 app = typer.Typer(
@@ -60,8 +66,13 @@ app.add_typer(workflow_app, name="workflow")
 app.add_typer(mcif_app, name="mcif")
 app.add_typer(execution_app, name="execution")
 app.add_typer(knowledge_app, name="knowledge")
+app.add_typer(lesson_app, name="lesson")
+app.add_typer(skill_app, name="skill")
 app.add_typer(postprocess_app, name="postprocess")
+app.add_typer(analysis_app, name="magnetic-analysis")
 app.add_typer(agent_app, name="agent")
+research_app = typer.Typer(no_args_is_help=True, help="Plan and validate mCIF-first magnetic research workflows.")
+app.add_typer(research_app, name="research")
 
 
 @app.command()
@@ -70,6 +81,60 @@ def doctor() -> None:
     typer.echo(f"magnetic-vasp-agent {__version__}")
     typer.echo(f"python {platform.python_version()}")
     typer.echo(f"pydantic {pydantic.__version__}")
+
+
+@app.command("web")
+def web(
+    port: int = typer.Option(8765, "--port", min=1, max=65535),
+    root: Path = typer.Option(Path("var/web"), "--root"),
+    profile: Path = typer.Option(Path("config/execution/cluster.json"), "--profile"),
+    open_browser: bool = typer.Option(True, "--open-browser/--no-browser"),
+) -> None:
+    """Open the local browser interface; never bind to the network."""
+    try:
+        import uvicorn
+        from dotenv import load_dotenv
+
+        from magnetic_vasp_agent.web import create_app
+    except ImportError as exc:
+        typer.echo("Web interface requires the optional 'web' extra.", err=True)
+        raise typer.Exit(2) from exc
+
+    url = f"http://127.0.0.1:{port}"
+    load_dotenv(Path.cwd() / ".env", override=False)
+    typer.echo(url)
+    if open_browser:
+        threading.Timer(1.5, webbrowser.open, args=(url,)).start()
+    uvicorn.run(create_app(root=root, execution_profile=profile), host="127.0.0.1", port=port)
+
+
+@research_app.command("from-mcif")
+def research_from_mcif(
+    mcif: list[Path] = typer.Option(..., "--mcif", exists=True, dir_okay=False),
+    output: Path = typer.Option(..., "--output"),
+    plan_id: str | None = typer.Option(None, "--plan-id"),
+    tasks: list[str] = typer.Option(
+        ["magnetic_order", "relax", "static", "dos", "mae", "convergence"],
+        "--task",
+        help="Research stages; repeat --task to add stages.",
+    ),
+    magnetic_mode: str = typer.Option("auto", "--magnetic-mode"),
+    encut: float = typer.Option(600.0, "--encut"),
+    spacing: float = typer.Option(0.25, "--spacing"),
+) -> None:
+    """Create a mCIF-first research plan and typed VASP workflow inputs."""
+    try:
+        config = ResearchConfig(
+            tasks=tasks,
+            magnetic_mode=magnetic_mode,
+            encut=encut,
+            kpoint_spacing=spacing,
+        )
+        plan = plan_research_from_mcif(mcif, output, plan_id=plan_id, config=config)
+        typer.echo(plan.model_dump_json(indent=2))
+    except (ValueError, OSError) as exc:
+        typer.echo(f"Research error: {exc}", err=True)
+        raise typer.Exit(2) from exc
 
 
 @potcar_app.command("scan")

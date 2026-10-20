@@ -9,9 +9,9 @@ from magnetic_vasp_agent.agent.tool_models import (
 )
 
 
-def _spec(tier: RiskTier) -> ToolSpec:
+def _spec(tier: RiskTier, name: str = "tool.x") -> ToolSpec:
     return ToolSpec(
-        name="tool.x",
+        name=name,
         description="a tool",
         risk_tier=tier,
         produces_files=tier != RiskTier.READ_ONLY,
@@ -19,8 +19,8 @@ def _spec(tier: RiskTier) -> ToolSpec:
     )
 
 
-def _call() -> ToolCall:
-    return ToolCall(call_id="T1", tool="tool.x", arguments={})
+def _call(name: str = "tool.x") -> ToolCall:
+    return ToolCall(call_id="T1", tool=name, arguments={})
 
 
 def test_read_only_is_auto_approved() -> None:
@@ -59,9 +59,44 @@ def test_cluster_plan_approved_with_named_approver() -> None:
     assert record.approver == "researcher"
 
 
-def test_cluster_execute_is_always_blocked() -> None:
+def test_cluster_execute_without_approval_awaits() -> None:
     policy = ApprovalPolicy(
         approved_cluster_plan_call_ids=["T1"], approver="researcher"
+    )
+    record = decide_approval(
+        _call("execution.launch"),
+        _spec(RiskTier.CLUSTER_EXECUTE, "execution.launch"),
+        policy,
+    )
+    assert record.state == ApprovalState.AWAITING_APPROVAL
+
+
+def test_cluster_execute_approved_id_still_needs_named_approver() -> None:
+    policy = ApprovalPolicy(approved_cluster_execute_call_ids=["T1"])
+    record = decide_approval(
+        _call("execution.launch"),
+        _spec(RiskTier.CLUSTER_EXECUTE, "execution.launch"),
+        policy,
+    )
+    assert record.state == ApprovalState.BLOCKED
+
+
+def test_cluster_execute_approved_with_named_approver() -> None:
+    policy = ApprovalPolicy(
+        approved_cluster_execute_call_ids=["T1"], approver="researcher"
+    )
+    record = decide_approval(
+        _call("execution.launch"),
+        _spec(RiskTier.CLUSTER_EXECUTE, "execution.launch"),
+        policy,
+    )
+    assert record.state == ApprovalState.APPROVED
+    assert record.approver == "researcher"
+
+
+def test_nonfixed_cluster_execute_is_blocked_even_when_preapproved() -> None:
+    policy = ApprovalPolicy(
+        approved_cluster_execute_call_ids=["T1"], approver="researcher"
     )
     record = decide_approval(_call(), _spec(RiskTier.CLUSTER_EXECUTE), policy)
     assert record.state == ApprovalState.BLOCKED

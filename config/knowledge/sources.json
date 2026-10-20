@@ -159,21 +159,48 @@
       "validated": true,
       "tasks": [],
       "magnetic_modes": [],
-      "notes": "User-confirmed operational policy; deterministic code remains the enforcement layer."
+      "notes": "Shared operational policy; it must not name a single member account or home directory."
     },
     {
-      "id": "deterministic-cluster-profile",
-      "title": "Deterministic cluster execution profile",
+      "id": "team-member-setup",
+      "title": "Per-member site identity and local usage records",
       "source_type": "team_policy",
       "location_type": "local_file",
       "content_handling": "project",
-      "path": "config/execution/cluster.json",
+      "path": "docs/knowledge/member_setup.md",
+      "required": true,
+      "validated": true,
+      "tasks": [],
+      "magnetic_modes": [],
+      "notes": "How members compose a private profile from the shared site template."
+    },
+    {
+      "id": "deterministic-cluster-site",
+      "title": "Shared team cluster site template",
+      "source_type": "team_policy",
+      "location_type": "local_file",
+      "content_handling": "project",
+      "path": "config/execution/site.team.json",
       "required": true,
       "validated": true,
       "vasp_versions": ["5.4.4"],
       "tasks": [],
       "magnetic_modes": [],
-      "notes": "Machine-readable enforcement settings; execution remains disabled."
+      "notes": "Machine-readable shared site facts. Personal identity.json and composed cluster.json are not indexed."
+    },
+    {
+      "id": "local-member-usage",
+      "title": "Per-member local usage records",
+      "source_type": "runtime_experience",
+      "location_type": "local_directory",
+      "content_handling": "local_only",
+      "path": "var/reviews/usage",
+      "required": false,
+      "validated": false,
+      "tasks": [],
+      "magnetic_modes": [],
+      "extensions": [".md"],
+      "notes": "Sanitized per-reviewer notes written after human input review. Optional until someone records a review."
     },
     {
       "id": "historical-incar-fixture",
@@ -226,6 +253,34 @@
       "tasks": [],
       "magnetic_modes": [],
       "notes": "The credential-bearing source HTML is excluded; only redacted findings and conflicts are retained."
+    },
+    {
+      "id": "reference-demo-library",
+      "title": "Local Reference_Demo literature library",
+      "source_type": "personal_note",
+      "location_type": "local_directory",
+      "content_handling": "project",
+      "path": "Reference_Demo/Reference_Demo",
+      "required": true,
+      "validated": false,
+      "tasks": [],
+      "magnetic_modes": [],
+      "extensions": [".md", ".txt", ".bib"],
+      "notes": "User literature catalog, grouping tree, and BibTeX. Unvalidated; PDFs stay local and are not auto-indexed."
+    },
+    {
+      "id": "agent-skill-library",
+      "title": "Project agent skill instructions",
+      "source_type": "personal_note",
+      "location_type": "local_directory",
+      "content_handling": "project",
+      "path": "skills/skills",
+      "required": true,
+      "validated": false,
+      "tasks": [],
+      "magnetic_modes": [],
+      "extensions": [".md"],
+      "notes": "SKILL.md and skill references. Codex .system skills are skipped. Scripts are never executed or indexed."
     }
   ]
 }

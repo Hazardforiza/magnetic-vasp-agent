@@ -280,7 +280,13 @@ def parse_outcar(text: str, *, source_sha256: str) -> OutcarSummary:
     mode = _magnetic_mode(params)
     lines = text.splitlines()
 
-    electronic_converged = "reached required accuracy" in text
+    electronic_converged = bool(
+        re.search(
+            r"(?:aborting loop because EDIFF is reached|reached required accuracy)",
+            text,
+            re.IGNORECASE,
+        )
+    )
     free_energy = _search_last_float(rf"free\s+energy\s+TOTEN\s*=\s*({_NUM})", text)
     energy_wo = _search_last_float(rf"energy\s+without\s+entropy\s*=\s*({_NUM})", text)
     energy_sigma0 = _search_last_float(rf"energy\(sigma->0\)\s*=\s*({_NUM})", text)

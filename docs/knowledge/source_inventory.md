@@ -10,6 +10,8 @@
 - `server_maintenance.html` 因包含明文凭据和管理员命令而永久排除；仓库只保存 `docs/knowledge/cluster_manual_sanitized.md` 中的脱敏审查与冲突说明，分类为未验证的个人资料。
 - 集群策略文档和机器配置属于用户确认的 `team_policy`。
 - 历史 INCAR/KPOINTS fixture 只证明解析和往返行为，当前标记为未验证的个人资料，不作为收敛或最佳参数证据。
+- `Reference_Demo/Reference_Demo` 登记为未验证的个人文献库（Markdown、分组文本、BibTeX）。PDF 正文不自动入库。
+- `skills/skills` 登记为未验证的 skill 说明；`.system` 与 skill 脚本不进入清单，也不能被 Agent 执行。
 
 没有任何现有历史案例被标记为 `validated_case`。只有在用户确认计算成功，并补齐 VASP 版本、POTCAR 标识、收敛证据和结果摘要后，才允许晋升。
 

@@ -13,7 +13,7 @@ from magnetic_vasp_agent.agent.tools import default_registry
 
 agent_app = typer.Typer(
     no_args_is_help=True,
-    help="Expose the deterministic core as gated tools; cluster execution stays disabled.",
+    help="Expose the deterministic core as typed tools with gated cluster launch.",
 )
 
 

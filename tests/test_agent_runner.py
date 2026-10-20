@@ -7,9 +7,12 @@ from magnetic_vasp_agent.agent.runner import evaluate_call, run_plan
 from magnetic_vasp_agent.agent.tool_models import (
     AgentPlan,
     ApprovalState,
+    CONTROLLED_CLUSTER_EXECUTE_TOOLS,
+    RiskTier,
     sha256_of,
     ToolCall,
 )
+from magnetic_vasp_agent.agent.tools import StructureShowInput, ToolRegistry
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MN3AL_POSCAR = str(FIXTURES / "Mn3Al" / "POSCAR")
@@ -114,6 +117,41 @@ def test_cluster_plan_with_approval_passes_the_gate() -> None:
     approval, result = evaluate_call(call, policy=policy)
     assert approval.state == ApprovalState.APPROVED
     assert result.status != "blocked"
+
+
+def test_approved_fixed_cluster_tools_produce_controlled_transcripts() -> None:
+    for tool_name in sorted(CONTROLLED_CLUSTER_EXECUTE_TOOLS):
+        registry = ToolRegistry()
+        registry.register(
+            name=tool_name,
+            description="offline controlled-operation stub",
+            risk_tier=RiskTier.CLUSTER_EXECUTE,
+            produces_files=True,
+            input_model=StructureShowInput,
+            run=lambda data: {"state": "completed", "offline_stub": True},
+        )
+        plan = AgentPlan(
+            goal="exercise the controlled-operation approval contract offline",
+            calls=[
+                ToolCall(
+                    call_id="T1",
+                    tool=tool_name,
+                    arguments={"poscar": MN3AL_POSCAR},
+                )
+            ],
+        )
+        transcript = run_plan(
+            plan,
+            policy=ApprovalPolicy(
+                approved_cluster_execute_call_ids=["T1"], approver="researcher"
+            ),
+            registry=registry,
+        )
+
+        assert transcript.status == "completed"
+        assert transcript.cluster_execution == "controlled"
+        assert transcript.approvals[0].approver == "researcher"
+        assert transcript.results[0].approval_state == ApprovalState.EXECUTED
 
 
 def test_local_write_tool_produces_files(tmp_path) -> None:

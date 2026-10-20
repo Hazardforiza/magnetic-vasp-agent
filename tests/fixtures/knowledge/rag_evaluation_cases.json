@@ -216,7 +216,7 @@
       "id": "compute-node-allowlist",
       "question": "本组允许使用哪些计算节点？",
       "expected_facts": [
-        "允许节点只有 cu21、cu22、cu23、cu41、cu42、cu43、cu48、cu49、cu50。",
+        "允许节点只有 cu20、cu21、cu22、cu23、cu38、cu39、cu40、cu41、cu43、cu48、cu49、cu50。",
         "白名单之外的节点不能因为看起来空闲而使用。",
         "节点选择仍需用户确认实际空闲窗口。"
       ],

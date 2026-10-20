@@ -12,8 +12,8 @@ Policy summary:
 * ``cluster_plan``   -> requires the call id to appear in
   ``approved_cluster_plan_call_ids`` (an explicit human approval); otherwise the
   run halts awaiting approval.
-* ``cluster_execute``-> always blocked. No such tool is registered, but the gate
-  refuses it defensively.
+* ``cluster_execute``-> only fixed smoke, transfer, and launch calls may proceed,
+  and only after each call id has a named human approval.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from magnetic_vasp_agent.agent.tool_models import (
+    CONTROLLED_CLUSTER_EXECUTE_TOOLS,
     ApprovalRecord,
     ApprovalState,
     RiskTier,
@@ -35,6 +36,7 @@ class ApprovalPolicy(StrictModel):
 
     allow_local_writes: bool = True
     approved_cluster_plan_call_ids: list[str] = Field(default_factory=list)
+    approved_cluster_execute_call_ids: list[str] = Field(default_factory=list)
     approver: str | None = None
 
 
@@ -94,7 +96,43 @@ def decide_approval(
             state=ApprovalState.AWAITING_APPROVAL,
             reason="cluster plan requires explicit human approval",
         )
-    # cluster_execute or any unknown/elevated tier.
+    if tier == RiskTier.CLUSTER_EXECUTE:
+        if (
+            call.tool not in CONTROLLED_CLUSTER_EXECUTE_TOOLS
+            or spec.name != call.tool
+        ):
+            return ApprovalRecord(
+                call_id=call.call_id,
+                tool=call.tool,
+                risk_tier=tier,
+                state=ApprovalState.BLOCKED,
+                reason="only fixed controlled tools may execute on cluster",
+            )
+        if call.call_id in policy.approved_cluster_execute_call_ids:
+            if not (policy.approver and policy.approver.strip()):
+                return ApprovalRecord(
+                    call_id=call.call_id,
+                    tool=call.tool,
+                    risk_tier=tier,
+                    state=ApprovalState.BLOCKED,
+                    reason="cluster execution approval requires a named approver",
+                )
+            return ApprovalRecord(
+                call_id=call.call_id,
+                tool=call.tool,
+                risk_tier=tier,
+                state=ApprovalState.APPROVED,
+                reason="cluster execution explicitly approved by human",
+                approver=policy.approver,
+            )
+        return ApprovalRecord(
+            call_id=call.call_id,
+            tool=call.tool,
+            risk_tier=tier,
+            state=ApprovalState.AWAITING_APPROVAL,
+            reason="cluster execution requires explicit human approval",
+        )
+    # unknown/elevated tier.
     return ApprovalRecord(
         call_id=call.call_id,
         tool=call.tool,

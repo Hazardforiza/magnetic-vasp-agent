@@ -1,12 +1,19 @@
 # ruff: noqa: B008 - Typer requires option declarations in function signatures.
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
 
 from magnetic_vasp_agent.postprocess import analyze_calculation
 from magnetic_vasp_agent.postprocess_models import CalculationResult
+from magnetic_vasp_agent.vaspkit import (
+    VaspkitBackend,
+    run_vaspkit,
+    run_vaspkit_task,
+)
+from magnetic_vasp_agent.vaspkit_plot import plot_band, plot_tdos
 
 postprocess_app = typer.Typer(
     no_args_is_help=True,
@@ -56,6 +63,77 @@ def show_calculation(
         _error(exc)
     if not result.converged:
         raise typer.Exit(1)
+
+
+@postprocess_app.command("vaspkit")
+def vaspkit_fixed(
+    directory: Path = typer.Argument(..., exists=True, file_okay=False),
+    task: str = typer.Option(..., "--task"),
+    executable: Path = typer.Option(..., "--executable", exists=True, dir_okay=False),
+    backend: VaspkitBackend = typer.Option(VaspkitBackend.NATIVE, "--backend"),
+    wsl_distribution: str | None = typer.Option(None, "--wsl-distribution"),
+) -> None:
+    """Run a fixed, validated VASPKIT 303, 211, or 111 adapter."""
+    try:
+        result = run_vaspkit(
+            directory,
+            task,
+            executable,
+            backend=backend,
+            wsl_distribution=wsl_distribution,
+        )
+        typer.echo(json.dumps(result, indent=2))
+    except (ValueError, RuntimeError, OSError) as exc:
+        _error(exc)
+
+
+@postprocess_app.command("vaspkit-task")
+def vaspkit_numeric_task(
+    directory: Path = typer.Argument(..., exists=True, file_okay=False),
+    task_id: int = typer.Option(..., "--task-id", min=0, max=9999),
+    executable: Path = typer.Option(..., "--executable", exists=True, dir_okay=False),
+    menu_input: list[str] | None = typer.Option(None, "--input"),
+    backend: VaspkitBackend = typer.Option(VaspkitBackend.NATIVE, "--backend"),
+    wsl_distribution: str | None = typer.Option(None, "--wsl-distribution"),
+) -> None:
+    """Run a bounded numeric task without claiming scientific validation."""
+    try:
+        result = run_vaspkit_task(
+            directory,
+            task_id,
+            executable,
+            menu_input,
+            backend=backend,
+            wsl_distribution=wsl_distribution,
+        )
+        typer.echo(json.dumps(result, indent=2))
+    except (ValueError, RuntimeError, OSError) as exc:
+        _error(exc)
+
+
+@postprocess_app.command("plot-dos")
+def plot_dos_command(
+    data: Path = typer.Argument(..., exists=True, dir_okay=False),
+    output: Path = typer.Option(..., "--output"),
+) -> None:
+    """Strictly parse a VASPKIT TDOS.dat and write a hashed PNG."""
+    try:
+        typer.echo(plot_tdos(data, output).model_dump_json(indent=2))
+    except (ValueError, RuntimeError, OSError) as exc:
+        _error(exc)
+
+
+@postprocess_app.command("plot-band")
+def plot_band_command(
+    data: Path = typer.Argument(..., exists=True, dir_okay=False),
+    labels: Path = typer.Option(..., "--labels", exists=True, dir_okay=False),
+    output: Path = typer.Option(..., "--output"),
+) -> None:
+    """Strictly parse VASPKIT band data and KLABELS, then write a hashed PNG."""
+    try:
+        typer.echo(plot_band(data, labels, output).model_dump_json(indent=2))
+    except (ValueError, RuntimeError, OSError) as exc:
+        _error(exc)
 
 
 def _render_summary(result: CalculationResult) -> list[str]:

@@ -11,8 +11,8 @@ Hard boundaries carried over from the rest of the project:
 * An agent can only invoke tools that exist in the registry; free-form shell,
   SSH, or MPI strings are never accepted.
 * Every typed request still passes the existing deterministic validators.
-* Cluster execution stays disabled: no launch/cancel/retry tool is registered
-  and the ``cluster_execute`` risk tier is always blocked.
+* Fixed smoke, transfer, and launch entries require separate named approvals;
+  arbitrary shell/launch/cancel/retry tools remain unavailable.
 * POTCAR content is never placed in a tool result or sent to an LLM.
 """
 

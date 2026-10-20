@@ -9,7 +9,9 @@ description = "Local control plane for magnetic VASP workflows"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "matplotlib>=3.8,<4",
     "pydantic>=2.8,<3",
+    "rich>=13.0,<14",
     "typer>=0.12,<1",
     "pymatgen>=2025.6.14,<2026",
 ]
@@ -17,6 +19,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<9",
+    "pytest-cov>=6,<7",
+    "ruff>=0.8,<1",
 ]
 rag = [
     "qdrant-client>=1.15,<2",
@@ -29,6 +33,13 @@ agent = [
     "langchain-core>=0.3,<1",
     "langchain-openai>=0.2,<1",
 ]
+web = [
+    "fastapi>=0.115,<1",
+    "pypdf>=6,<7",
+    "python-dotenv>=1,<2",
+    "python-multipart>=0.0.20,<1",
+    "uvicorn>=0.30,<1",
+]
 
 [project.scripts]
 magvasp = "magnetic_vasp_agent.cli:app"
@@ -36,7 +47,22 @@ magvasp = "magnetic_vasp_agent.cli:app"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+magnetic_vasp_agent = ["web_static/*"]
+
 [tool.pytest.ini_options]
 addopts = "-q"
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

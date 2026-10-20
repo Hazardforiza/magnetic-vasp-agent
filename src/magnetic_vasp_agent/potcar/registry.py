@@ -6,7 +6,6 @@ from pathlib import Path
 
 from magnetic_vasp_agent.models import PotentialRecord, PotentialRegistry
 
-
 _TITEL_RE = re.compile(r"^\s*TITEL\s*=\s*(.+?)\s*$", re.MULTILINE)
 _VRHFIN_RE = re.compile(r"^\s*VRHFIN\s*=\s*([^\r\n]+)", re.MULTILINE)
 _LEXCH_RE = re.compile(r"^\s*LEXCH\s*=\s*([^\s;]+)", re.MULTILINE)

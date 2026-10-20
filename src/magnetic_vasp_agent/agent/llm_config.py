@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, model_validator
 
 from magnetic_vasp_agent.agent.tool_models import StrictModel
+
+WireApi = Literal["chat", "responses"]
+ReasoningEffort = Literal["minimal", "low", "medium", "high"]
 
 
 class LlmConfig(StrictModel):
@@ -27,6 +31,9 @@ class LlmConfig(StrictModel):
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     timeout_seconds: float = Field(default=60.0, gt=0, le=600)
     max_tool_calls: int = Field(default=12, ge=1, le=100)
+    wire_api: WireApi = "chat"
+    reasoning_effort: ReasoningEffort | None = None
+    disable_response_storage: bool = False
 
     @model_validator(mode="after")
     def validate_config(self) -> LlmConfig:

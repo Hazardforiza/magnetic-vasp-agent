@@ -8,12 +8,13 @@ from pydantic import ValidationError
 
 from magnetic_vasp_agent.agent.approval import ApprovalPolicy
 from magnetic_vasp_agent.agent.graph import (
+    _content_to_text,
     _strip_sentinels,
     langgraph_available,
     run_goal,
 )
 from magnetic_vasp_agent.agent.llm_config import LlmConfig, load_llm_config
-from magnetic_vasp_agent.agent.tool_models import ApprovalState
+from magnetic_vasp_agent.agent.tool_models import ApprovalState, RiskTier
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MN3AL_POSCAR = str(FIXTURES / "Mn3Al" / "POSCAR")
@@ -24,6 +25,19 @@ def _config() -> LlmConfig:
         model="openai/test-model",
         base_url="https://gateway.example.com/v1",
         api_key_env="MAGVASP_TEST_KEY",
+    )
+
+
+def test_content_to_text_reads_responses_blocks() -> None:
+    assert _content_to_text("plain") == "plain"
+    assert (
+        _content_to_text(
+            [
+                {"type": "reasoning", "summary": []},
+                {"type": "text", "text": "结构检查完成。"},
+            ]
+        )
+        == "结构检查完成。"
     )
 
 
@@ -66,6 +80,19 @@ def test_resolve_api_key_missing_raises(monkeypatch) -> None:
     monkeypatch.delenv("MAGVASP_TEST_KEY", raising=False)
     with pytest.raises(RuntimeError, match="MAGVASP_TEST_KEY"):
         _config().resolve_api_key()
+
+
+def test_config_accepts_responses_wire_and_reasoning() -> None:
+    config = LlmConfig(
+        model="gpt-5.6-sol",
+        base_url="https://wawazz.xyz",
+        wire_api="responses",
+        reasoning_effort="high",
+        disable_response_storage=True,
+    )
+    assert config.wire_api == "responses"
+    assert config.reasoning_effort == "high"
+    assert config.disable_response_storage is True
 
 
 def test_example_config_loads(tmp_path) -> None:
@@ -194,6 +221,56 @@ def test_cluster_plan_pauses_then_resumes_with_human_approval() -> None:
     first = resumed.transcript.results[0]
     assert first.tool == "execution.transfer_plan"
     assert first.status != "blocked"
+
+
+@pytest.mark.skipif(not langgraph_available(), reason="langgraph not installed")
+def test_cluster_execute_pauses_then_resumes_with_named_approval() -> None:
+    from langchain_core.messages import AIMessage
+
+    from magnetic_vasp_agent.agent.graph import VaspAgentGraph
+    from magnetic_vasp_agent.agent.tools import StructureShowInput, ToolRegistry
+
+    registry = ToolRegistry()
+    registry.register(
+        name="execution.launch",
+        description="offline launch stub",
+        risk_tier=RiskTier.CLUSTER_EXECUTE,
+        produces_files=True,
+        input_model=StructureShowInput,
+        run=lambda data: {"state": "running", "offline_stub": True},
+    )
+    model = _scripted_model(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "execution_launch",
+                        "args": {"poscar": MN3AL_POSCAR},
+                        "id": "call_1",
+                    }
+                ],
+            ),
+            AIMessage(content="Controlled launch call completed; review required."),
+        ]
+    )
+    agent = VaspAgentGraph(_config(), model=model, registry=registry)
+
+    paused = agent.run("exercise launch approval offline")
+    assert len(paused.pending_approvals) == 1
+    assert paused.pending_approvals[0].tool == "execution.launch"
+    assert paused.pending_approvals[0].risk_tier == RiskTier.CLUSTER_EXECUTE
+    assert paused.transcript.results == []
+
+    resumed = agent.resume(
+        paused,
+        {paused.pending_approvals[0].call_id: {"approve": True, "approver": "researcher"}},
+    )
+    assert resumed.pending_approvals == []
+    assert resumed.transcript.status == "completed"
+    assert resumed.transcript.cluster_execution == "controlled"
+    assert resumed.transcript.results[0].tool == "execution.launch"
+    assert resumed.transcript.results[0].status == "ok"
 
 
 @pytest.mark.skipif(not langgraph_available(), reason="langgraph not installed")

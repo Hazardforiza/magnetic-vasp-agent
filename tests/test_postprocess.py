@@ -104,6 +104,21 @@ def test_outcar_orbital_moments_present() -> None:
     assert mn.orbital_moments["d"] == pytest.approx(3.598, abs=1e-3)
 
 
+def test_outcar_static_ediff_stop_is_electronic_convergence() -> None:
+    text = """
+ ISPIN = 2
+ LNONCOLLINEAR = F
+ LSORBIT = F
+ NELM = 300
+ NSW = 0
+ NIONS = 1
+ NELECT = 2.0
+ aborting loop because EDIFF is reached
+"""
+    summary = parse_outcar(text, source_sha256="0" * 64)
+    assert summary.electronic_converged is True
+
+
 # --------------------------------------------------------------------------- #
 # vasprun.xml                                                                   #
 # --------------------------------------------------------------------------- #

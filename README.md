@@ -6,11 +6,67 @@
 
 ## 当前进度
 
-已完成第 1–9 步的本地确定性内核。RAG 方向已完成第 10.1–10.9 步：知识治理与 20 题评测集、9 个 VASP Wiki 页面/58 个可追溯 chunk、74 文档 BM25 基线、本地 Qdrant 混合检索、离线多语言 MiniLM embedding、只允许 `draft_only` 的类型化证据包、带 `[E#]` 引用的回答草稿、冲突标注与人工审核记录，以及结构化离线问答协议。第 11 步新增了一个框架无关、可完全离线测试的 Agent 工具协议与分级审批状态机，把确定性内核暴露为类型化工具，并提供可选的 LangGraph 编排（OpenAI 兼容后端）把自然语言目标转成经校验的工具调用链，其中 `cluster_plan` 的人工批准用 LangGraph 的 `interrupt` 做成真正的人在环。集群执行仍保持硬禁用，LLM 永远不能发任意 shell。
+第 1–12 步的确定性内核、RAG 与 Agent 工具协议已经落地，并已提交（见下方里程碑表）。第 13 步之后的工作区还包含：**受控真实集群启动**、**Skills / Reference_Demo 只读接入**、**mCIF → 可审查输入包**、**人工输入审核与按人学习**、**全组站点模板 + 每人身份合成**和**本机网页工作台**。这些后半段多数仍在工作区，尚未全部提交。
 
-第 10.1–10.9 步与第 11 步已提交（见下方提交历史）。第 11 步的 LangGraph 路径已在一个真实 OpenAI 兼容端点上跑通多轮工具调用（密钥只从环境变量读取、不入库）。第 12 步新增 VASP 输出后处理（`postprocess.py`/`postprocess_models.py`/`postprocess_cli.py`），把算完的目录解析成类型化、带溯源哈希的结果，并注册为只读 Agent 工具 `postprocess.parse`；新增 `tests/test_postprocess.py`，含用真实 CuMnAs 算例裁剪出的离线 fixture 与仅在本机历史归档存在时运行的交叉校验测试。本机当前环境没有安装 Ruff，因此不能把本轮 Ruff 检查写成已通过。`tests/test_knowledge.py::test_knowledge_search_help_describes_local_model_requirement` 在当前 Windows 控制台的帮助文本换行/编码下会失败，该失败在未改动的 HEAD 上同样出现，与本轮改动无关。当前仍是“本地生成与审查阶段”：尚未连接或上传到真实集群，尚未启动/取消/重试 VASP；VASP 输出后处理已可离线解析真实算例，但尚未接入真实集群产出的实时结果。
+当前真实状态（2026-09-23）：
 
-`mcif/` 和 `vasp笔记/` 是用户原始资料目录，目前保持未跟踪状态，不属于本轮功能提交，也不应被自动修改或提交。
+- LLM 只能调用注册表里的类型化工具，不能发任意 shell。固定的 `execution.smoke`、`execution.transfer`、`execution.launch` 均属于 `cluster_execute`，每次调用都要单独、具名人工批准；`execution.launch` 只在最新探测、人工资源批准、MPI smoke、传输哈希核验和本次人工确认口令全部满足时才会尝试启动。`cancel` / `retry` 仍未提供。
+- 人用 CLI 在 `cu22` 完成 Mn3Al 共线 SCF 并拉回解析；这是电子步收敛，不是科学结案。
+- `var/agent-e2e-20260922-feo-c02-u5-r2/` 留有 FeO 候选磁性计算胞的真实 SCF、DOS、Band 运行记录、逐次人工批准、回传哈希、解析结果和图。三步均解析为收敛；执行由分段 Agent 工具计划完成，不应表述成“一句话目标全程自主运行”。该目录是本机证据，不随源码发布。
+- 组员不应复制某人的 `cluster.json`。全组用 `config/execution/site.team.json`，每人用 gitignore 的 `identity.json`，再 `execution compose` 生成本机 profile。
+- 本机网页入口是 `magvasp web`，可生成和审核输入、运行带逐次审批的 Agent 会话、导入 VASP 结果并查看可用图像；只监听 `127.0.0.1`，不是可供多人远程登录的网站。详细使用见 [`docs/web.md`](docs/web.md)。
+- 网页加入后最近一次完整回归为 660 个通过、4 个按环境条件跳过；有一个既有 LangGraph 待弃用警告。网页功能仍以本轮测试结果为准。
+- `mcif/` 和 `vasp笔记/` 是用户原始资料，保持未跟踪，不要自动提交。
+
+## 今天怎么用（本机网页与命令行）
+
+在仓库根目录打开 PowerShell，安装 Agent 与网页依赖并启动本机服务。浏览器默认自动打开 `http://127.0.0.1:8765`：
+
+```powershell
+uv sync --extra agent --extra web --frozen
+uv run --extra agent --extra web --frozen magvasp doctor
+uv run --extra agent --extra web --frozen magvasp web
+```
+
+不熟悉命令行的组员也可以双击仓库根目录的 `start-web.bat`；首次使用仍需先安装 Python 3.11/`uv`，并完成本机 POTCAR、模型和集群身份配置。
+
+网页仅供这台电脑的当前用户使用；其他组员需在各自电脑上安装并启动。生成输入前，还需按[赝势库与 POTCAR](#赝势库与-potcar)扫描各自授权的赝势库。网页「环境」页会显示 POTCAR 注册表和 Agent 配置是否就绪。自然语言 Agent 另需每人的 `config/agent/llm.json` 与 `MAGVASP_LLM_API_KEY`；集群操作另需每人的 SSH 身份配置。网页运行状态和限制见 [`docs/web.md`](docs/web.md)。
+
+命令行仍可直接使用：
+
+```powershell
+uv run --extra agent --extra web --frozen magvasp agent tools
+```
+
+**自然语言（需本机 `config/agent/llm.json` 与环境变量 `MAGVASP_LLM_API_KEY`，密钥不要贴进聊天或 Git）：**
+
+```powershell
+Get-Content .env | ForEach-Object {
+  if ($_ -match '^(MAGVASP_LLM_API_KEY|OPENAI_API_KEY)=(.*)$') {
+    Set-Item -Path "env:$($matches[1])" -Value $matches[2]
+  }
+}
+uv run --extra agent --extra web --frozen magvasp agent chat `
+  --goal "查看 mcif/candidate_02_FeO_BNS2_7.mcif，并生成可审查的共线 SCF 输入" `
+  --config config\agent\llm.json `
+  --output var\my-chat.json
+```
+
+**组员首次配置（组内私有站点模板存在时，工位电脑一般选 `office`，笔记本隧道选 `tunnel`）：**
+
+```powershell
+copy config\execution\identity.example.json config\execution\identity.json
+# 编辑 user 为自己的集群账号，connection 选 office 或 tunnel
+
+uv run --extra agent --extra web --frozen magvasp execution compose `
+  --site config\execution\site.team.json `
+  --identity config\execution\identity.json `
+  --output config\execution\cluster.json
+```
+
+密码只在这台电脑的 SSH 提示里输入。合成后的远端目录必须是 `/home/<自己>/magvasp/runs`。
+
+给别人使用时应通过审查后的 GitHub 私有源码仓库共享程序，再由每人自行配置授权 POTCAR、模型密钥和集群身份；不分享某个人的 `.env`、`cluster.json` 或计算产物。网页不会因为代码放到 GitHub 就变成在线服务，公开发布前还须清理第三方资料和真实站点信息。
 
 ## 开发里程碑与完整变更历史
 
@@ -34,6 +90,13 @@
 | 10.5 RAG 证据契约 | `c8559ca` | `knowledge/retrieval.py`、`retrieval_models.py`、`knowledge_cli.py`、`tests/test_knowledge.py` | 生成稳定引用编号、缺失来源、未验证证据和人工审核风险；输出只能用于回答草稿，不能驱动输入修改或集群执行。 |
 | 10.6 本地多语言 embedding | `c8559ca` | `knowledge/embedding.py`、`knowledge/retrieval.py`、`knowledge_cli.py`、`tests/test_knowledge.py`、`docs/knowledge/embedding_model.md` | 固定 Apache-2.0 MiniLM ONNX revision；注册并校验模型文件清单、哈希和运行时；支持离线 semantic Qdrant 索引；在同一 20 题集上与 BM25/hash 基线比较。 |
 | 10.7 带引用回答草稿 | `9553b46` + `a23149f` | `knowledge/retrieval_models.py`、`knowledge/retrieval.py`、`knowledge_cli.py`、`tests/test_answer_draft.py` | 将证据包绑定到结构化回答草稿；强制 `[E#]` 引用与完整性校验；缺失、未知或未验证证据保持人工审核，动作固定为 `draft_only`。 |
+| 10.8–10.9 冲突审核与离线问答协议 | 已提交（见第 10.8/10.9 节） | `knowledge_cli.py`、`docs/knowledge/governance.md` | 冲突标注、人工审核记录、`knowledge answer` 结构化离线协议；动作仍为 `draft_only`。 |
+| 11. Agent 工具与 LangGraph | 已提交；受控集群扩展仍在工作区 | `agent/`、`agent_cli.py` | 类型化工具注册表、分级审批、`agent run-plan` / `agent chat`；当前工作区把固定的 `execution.smoke`、`execution.transfer`、`execution.launch` 列为需分别批准的 `cluster_execute` 工具，并让两种高风险层都支持 LangGraph `interrupt` / `resume`。 |
+| 12. VASP 输出后处理 | 已提交 | `postprocess.py`、`postprocess_cli.py` | 解析 OSZICAR/OUTCAR/vasprun.xml；逐离子磁矩；只读工具 `postprocess.parse`。 |
+| 13. 真实集群闸门与实测 | 工作区 | `execution_runtime.py`、`execution_remote.py`、`transfer.py`、`config/execution/` | 人用 CLI 在 `cu22` 完成 Mn3Al SCF；随后分段 Agent 工具计划在 `cu20` 完成 FeO 候选的 SCF、DOS、Band 受控执行、监控、回传和解析。每次集群动作仍需人工批准；单个自然语言目标全程自主执行尚未实测。 |
+| 14. Skills 与 Reference_Demo | 工作区 | `skills.py`、`config/skills/catalog.json`、`config/knowledge/sources.json` | `skill.list/show/read` 只读；脚本永不执行。知识库索引本地 `.md/.txt/.bib`，不含 Codex `.system`。 |
+| 15. mCIF 工作流与输入审核 | 工作区 | `mcif_workflow.py`、`input_review.py` | `workflow.from_mcif` 只从 mCIF 取 MAGMOM；`workflow review` 必须具名真人；Agent 不能自批；按审核人写入本机 usage。 |
+| 16. 站点模板 + 个人身份 | 工作区 | `execution_site.py`、`config/execution/site.team.json`、`docs/knowledge/member_setup.md` | 全组共享节点与两种连法；每人 `identity.json`；`execution compose` 合成 profile；知识库不再索引个人 `cluster.json`。 |
 
 上述提交还共同包含 `.gitignore`/`.gitattributes`、`pyproject.toml`、`uv.lock`、CLI 入口和回归测试。`POTCAR` 内容不进入 Git；测试中的赝势是明确标注的合成文本，不含授权数据。
 
@@ -55,7 +118,7 @@ git show --stat 5037181
 uv run --frozen pytest
 ```
 
-在 HEAD `a23149f` 的当前状态下，只有两个用户原始资料目录未跟踪：`mcif/`、`vasp笔记/`；它们仍不纳入版本控制。
+用户原始资料目录 `mcif/`、`vasp笔记/` 保持未跟踪，不纳入版本控制。第 13 步之后还有未提交的工作区改动（真实执行、skills、mCIF 审核、站点/身份）；提交前不要把 `.env`、`config/agent/llm.json`、`identity.json` 或 POTCAR 加进去。
 
 ## 本地环境
 
@@ -377,11 +440,11 @@ uv run --frozen magvasp workflow inspect var\demo-mcif\FeO
 
 ## 第八步：SSH 与直接 MPI 执行准备（默认禁用）
 
-第八步适配本组的真实集群约束，不使用 Slurm：本机 Agent 通过 SSH 进入 `zyy@192.168.164.203`，该入口 `mu01` 只作为跳板，绝不在其上启动 VASP。允许的计算节点严格限定为 `cu21`、`cu22`、`cu23`、`cu41`、`cu42`、`cu43`、`cu48`、`cu49`、`cu50`。默认配置见 `config/execution/cluster.json`，其中 `execution_enabled` 永远为 `false`。
+第八步适配本组的真实集群约束，不使用 Slurm：入口是 `mu01` 跳板，绝不在其上启动 VASP。当前允许的计算节点严格限定为 `cu20`、`cu21`、`cu22`、`cu23`、`cu38`、`cu39`、`cu40`、`cu41`、`cu43`、`cu48`、`cu49`、`cu50`。早期设计默认 `execution_enabled=false`；现在账号和连法来自每人 identity，是否启用执行由本机合成的 profile 决定，并且每次启动仍需独立人工审批。
 
 本步只实现三项确定性能力：
 
-- `execution probe` 生成或执行固定的只读预检，核实主机、用户、CPU 拓扑、进程、负载、内存、VASP 模块、Intel MPI 和三个 VASP 可执行文件。预检不上传文件、不发送信号、不启动 MPI；`--connect` 也只有这一组固定命令。
+- `execution login` / `execution probe --interactive` 走和 MobaXterm 一样的路径：在**你自己的终端**输入密码，密码不写文件、不进环境变量、不进仓库。探测脚本不再走 stdin，避免和密码抢同一条管道。LLM/CI 仍只能用 `BatchMode` 公钥路径，不能替你打密码。
 - `execution plan` 重新检查工作流包的四个输入、逐项哈希、物种/赝势顺序、INCAR/KPOINTS/goal 和依赖状态，输出候选 `mpirun` 命令、环境变量、CPU 绑定和阻塞原因。它不读取 POTCAR 内容，也不把 `CHGCAR` 文件名当作已验证产物。
 - `execution simulate` 只运行内置的极小 Python 子进程，测试完成、失败、超时、取消、日志和拒绝覆盖；不接受任意命令，不接触 VASP 或 SSH。
 
@@ -402,13 +465,13 @@ uv run --frozen magvasp execution simulate `
 
 即使预检显示空闲，当前计划仍会阻塞：空闲快照不是资源分配，`PSR` 也不是 CPU 预留；没有验证 Intel MPI 的单节点启动和绑定行为前，不生成可执行提交脚本。cu21 当前已有其他用户的计算占用全部物理核，因此不能作为本轮测试目标，且不会被本程序干预。
 
-第八步的 `ResourceAssessment.ready_to_run` 和执行报告的 `ready_to_run` 固定为 `false`。后续真正启用需要先由用户确认本组资源使用规则和空闲窗口，再用一个无科学结果的最小 MPI smoke test 验证单节点隔离、CPU 绑定、退出码和日志；这不是由 LLM 自主决定的步骤。LLM 可以提出执行计划和解释异常，但不能生成任意 shell、绕过节点白名单、选择 mu01、取消他人进程或自动重试。
+第八步的资源评估仍不能把空闲快照当成资源分配。真实启动需要用户确认本组资源使用规则和空闲窗口，再用一个无科学结果的最小 MPI smoke test 验证单节点隔离、CPU 绑定、退出码和日志；这不是由 LLM 自主决定的步骤。Agent 可依次提出固定的 `execution.smoke`、`execution.transfer`、`execution.launch`，但每次都要单独、具名人工批准，且不能生成任意 shell、绕过节点白名单、选择 `mu01`、取消他人进程或自动重试。
 
 ## 第九步：受控 SSH/SFTP 上传（默认只生成计划）
 
 第九步把已经通过第六、七步校验的 workflow 包绑定到一个新的远程目录。`execution transfer` 默认只生成传输计划，列出允许上传的输入文件、SHA256、固定 SSH/SFTP 参数和远端哈希校验脚本。上传范围严格为每步的 `POSCAR/POTCAR/INCAR/KPOINTS/manifest.json` 以及顶层 `workflow.manifest.json`；不会上传 `OUTCAR`、`CHGCAR`、`WAVECAR`、`vasprun.xml` 或任意用户文件。
 
-远端 `remote_root` 必须由你先确认是组内批准、已存在且有配额的专用目录，例如 `/home/zyy/magvasp/runs`。程序只创建其下的本次唯一叶目录，并使用 `test ! -e` 和 `test ! -L` 拒绝覆盖或跟随链接；失败目录不会自动删除，避免误删已有数据。传输完成后，固定的 `sha256sum` 输出必须与本地清单逐项一致，否则报告失败，不进入运行阶段。
+远端 `remote_root` 必须是组内批准、已存在且有配额的专用目录，合成本机 profile 后形如 `/home/<自己的用户名>/magvasp/runs`。程序只创建其下的本次唯一叶目录，并使用 `test ! -e` 和 `test ! -L` 拒绝覆盖或跟随链接；失败目录不会自动删除，避免误删已有数据。传输完成后，固定的 `sha256sum` 输出必须与本地清单逐项一致，否则报告失败，不进入运行阶段。
 
 ```powershell
 # 只生成计划，不连接集群
@@ -418,13 +481,13 @@ uv run --frozen magvasp execution transfer `
   --request config\execution\FeO.cu21.transfer.json
 ```
 
-只有显式加入 `--connect` 才会执行受控传输；这不是 VASP 提交，也不会执行 MPI。由于当前配置的 `remote_root` 为 `null`，命令会安全地拒绝，直到你确认远程专用目录后再另行修改配置。第九步仍不会提供 `launch`、`cancel` 或 `retry` 命令。
+只有显式加入 `--connect` 才会执行这条 CLI 的受控传输；这不是 VASP 提交。未合成有效 `remote_root` 时命令会拒绝。第 13 步之后，人用 CLI 在闸门齐全时可以启动远程 VASP；Agent 的固定 `execution.transfer` 与 `execution.launch` 分别需要本次具名人工批准，启动还必须同时提供最新探测关联的资源批准、通过的 smoke 报告、已核验传输报告和精确人工确认口令。FeO 候选已有分段受控真实执行记录，见顶部「当前进度」。
 
 ## 第 10.1 步：RAG 知识治理与来源清单
 
 这一阶段先建立专业知识库的证据边界，不安装向量数据库，也不调用 LLM。`knowledge/models.py` 定义五类来源：`official`、`team_policy`、`validated_case`、`runtime_experience`、`personal_note`；来源身份和 `validated` 状态分开记录。默认权威顺序为官方资料、组内策略、已验证案例、确认过的运行经验和个人笔记，确定性代码规则始终在 RAG 之外优先执行。
 
-机器可读声明位于 `config/knowledge/sources.json`，目前包含 17 个来源：9 个 VASP Wiki 页面只登记为未抓取的 `reference_only`；原始 Word/PDF 笔记保持 `local_only`；集群策略与机器配置属于已确认的 `team_policy`；历史 INCAR/KPOINTS 仅作为未科学验证的解析样本。当前没有案例被冒充为 `validated_case`。
+机器可读声明位于 `config/knowledge/sources.json`，目前包含 **21** 个来源：9 个 VASP Wiki 页面只登记为未抓取的 `reference_only`；原始 Word/PDF 笔记保持 `local_only`；组策略、组员配置说明与**共享站点模板**属于 `team_policy`；历史 INCAR/KPOINTS 仅作为未科学验证的解析样本；Reference_Demo 与 skill 文档按本地 Markdown 索引；每人审核后的 usage 是可选的 `local_only` 运行经验。个人 `identity.json` / 合成后的 `cluster.json` **不**进入知识目录。当前没有案例被冒充为 `validated_case`。
 
 ```powershell
 uv run --frozen magvasp knowledge inventory `
@@ -468,18 +531,31 @@ uv run --frozen magvasp knowledge capture-wiki `
 | 已执行 | 阅读 `vasp笔记/` 中的 Word/PDF 资料，并整理为 `docs/vasp_notes_knowledge.md` | 资料整理文件已纳入第八步提交；原始笔记目录仍保持用户资料状态。 |
 | 已执行 | 第 10.1 步知识来源声明、只读哈希盘点、重复检测和 20 题 RAG 评测基线 | 只处理来源治理与元数据；没有解析正文、向量化或调用模型。 |
 | 已执行 | 第 10.2 步固定域名抓取 9 个 VASP Wiki revision 并生成 58 个可追溯 chunk | 正文只在 Git 忽略的本地 capture 中；尚未核验所有页面对 VASP 5.4.4 的适用性。 |
-| 未执行 | 连接 `192.168.164.203`、创建远端目录、上传 workflow | 本机 OpenSSH 连接此前未打通，且 `remote_root` 尚未由用户确认。 |
-| 未执行 | 在 `cu21`–`cu50` 白名单节点运行 MPI smoke test | 没有验证 Intel MPI 的单节点隔离、绑定和实际 VASP 可执行文件。 |
-| 未执行 | 启动、监控、取消、重试真实 VASP | 当前没有真实 `launch`/`cancel`/`retry` 实现；也没有触碰 `cu21` 上已有计算。 |
-| 部分执行 | 解析 `OUTCAR`/`vasprun.xml`/OSZICAR/DOS/局域磁矩 | 第 12 步已实现确定性后处理（收敛、能量、逐离子磁矩、费米能、DOS 摘要、多源交叉校验），并用真实 CuMnAs 算例验证；尚未做跨算例的磁序自动比较与 MAE 汇总。 |
-| 部分执行 | 接入 LLM/编排框架 | 第 11 步加入可选的 LangGraph 绑定（OpenAI 兼容后端）与工具协议/审批状态机，并已在真实端点上跑通多轮工具调用；核心仍是确定性内核，未接入 MCP。 |
+| 已执行 | 本机隧道登录 `mu01`、cu22 只读 probe、MPI smoke、受控上传 Mn3Al 包 | 人用 CLI；密码不进 Agent。未把 `cu21` 上他人作业当作可抢占资源。 |
+| 已执行 | 在 `cu22` 启动真实 `vasp_std` 共线 SCF（24 核，NCORE=4）并拉回解析 | 电子步收敛；净磁矩约 0 是设计磁序对消，不是磁矩塌缩。DOS/Band 尚未另开 `run_id`。 |
+| 已执行 | 站点模板 + 个人 identity 合成、按审核人写本机 usage | 组员可换用户名和 `office`/`tunnel`；Agent 不能自批，受控启动仍需独立人工批准。 |
+| 未执行 | 在全部白名单节点上预装主机密钥并做常规 probe | 目前实测以 `cu22` 为主；`cu21` 常满，启动前必须重新 probe。 |
+| 已执行 | FeO 候选 SCF、DOS、Band 分段 Agent 工具计划与真实集群运行 | `var/agent-e2e-20260922-feo-c02-u5-r2/` 保留逐次批准、启动、状态、回传哈希和解析记录；三步均解析为收敛。运行依赖人工批准和分段计划，不能声称一次自然语言目标全程自主完成。 |
+| 部分执行 | 组员本机图形界面、审过才能执行、FeO +U 科学定稿 | 本机网页已支持输入生成与审核、Agent 审批、结果导入和可用图像；集群作业总览、首次配置向导及科学收敛研究仍待完善。 |
+| 部分执行 | 解析 `OUTCAR`/`vasprun.xml`/OSZICAR/DOS/局域磁矩 | 第 12 步已实现，并用 CuMnAs fixture 与 cu22 Mn3Al 真结果验证；跨算例磁序比较与 MAE 汇总仍待做。 |
+| 部分执行 | 接入 LLM/编排框架 | `agent chat` 已在真实 OpenAI 兼容端点跑通多轮工具调用；本机网页可创建带逐次审批的 Agent 会话，尚未验证一句话触发完整真实实验。 |
 
 ## 集群真实约束
 
-集群的入口是 `zyy@192.168.164.203`（默认 SSH 端口 22），进入后对应 `mu01`。`mu01` 只能作为跳板，禁止在其上运行 VASP、`mpirun` 或其他计算任务。允许本组使用的节点只有：
+执行层本身不绑定某个集群账号。本组共享站点模板是 [`config/execution/site.team.json`](config/execution/site.team.json)（节点白名单、`mu01`、工位 `192.168.164.203:7722` 与本机隧道 `127.0.0.1:17722`）。每人复制 [`identity.example.json`](config/execution/identity.example.json) 为 gitignore 的 `identity.json`，再 `magvasp execution compose` 生成本机 `cluster.json`。换完全不同的集群时用 [`cluster.example.json`](config/execution/cluster.example.json)。说明见 [`docs/execution/cluster_profile.md`](docs/execution/cluster_profile.md) 与 [`docs/knowledge/member_setup.md`](docs/knowledge/member_setup.md)。
+
+当前开发机通过本机隧道连接（identity `connection=tunnel` → `127.0.0.1:17722`）；工位电脑应选 `office` → `192.168.164.203:7722`。登录后必须验证主机为 `mu01`、用户为**当前 identity 里的账号**。跳板进入计算节点的内部 SSH 仍为 22。`mu01` 只能作为跳板，禁止在其上运行 VASP、`mpirun` 或其他计算任务。允许本组使用的节点只有：
+
+首次验证可由你在 MobaXterm 或自己的终端输入集群密码：
+
+```powershell
+uv run --frozen magvasp execution login --profile config\execution\cluster.json --connect --interactive
+```
+
+密码不会保存。后续 Agent 自动连接需要集群公钥认证或本机 SSH agent；Agent 只使用系统提供的密钥，不把密码写入 profile，也不启用 agent forwarding。
 
 ```text
-cu21 cu22 cu23 cu41 cu42 cu43 cu48 cu49 cu50
+cu20 cu21 cu22 cu23 cu38 cu39 cu40 cu41 cu43 cu48 cu49 cu50
 ```
 
 项目不使用 Slurm，目标运行方式是通过 SSH 到获批计算节点后直接使用 Intel MPI 启动 VASP。节点白名单是硬约束，不因 LLM 建议、负载快照或用户输入中的其他主机名而放宽。当前已知 `cu21` 正被其他用户占用全部物理核心，因此不能测试、不能发送信号、不能上传或修改其正在运行的目录。
@@ -490,7 +566,7 @@ cu21 cu22 cu23 cu41 cu42 cu43 cu48 cu49 cu50
 2. CPU 拓扑和 `PSR` 信息只能用于预检，不能证明 `mpirun` 已获得独占核心。
 3. 真实提交前必须由用户确认组内资源使用规则和空闲窗口，并先用无科学结果的最小 MPI smoke test 验证单节点隔离、绑定、退出码和日志。
 
-程序配置中的 `execution_enabled` 默认是 `false`，`remote_root` 当前为 `null`。在用户确认远端专用目录（例如 `/home/zyy/magvasp/runs`）之前，不应填写该字段，也不应执行 `execution transfer --connect`。
+站点模板里的远端目录模板是 `/home/{user}/magvasp/runs`。合成时必须带上自己的用户名路径分量；未完成组内放行前，identity 里的 `execution_enabled` 应保持 `false`。别人的家目录不能写进自己的 profile。
 
 ## 安全边界与禁止行为
 
@@ -504,19 +580,19 @@ cu21 cu22 cu23 cu41 cu42 cu43 cu48 cu49 cu50
 - LLM 生成的 INCAR、KPOINTS、POTCAR 选择或 MPI 参数都必须先转换为类型化请求，并通过确定性校验；校验失败时停在人工审查，不自动“猜改”。
 - 真实运行能力必须有显式开关和用户确认；dry-run、plan、simulate 不得被描述成已完成计算。
 
-## 当前已知问题与下一步
+## 当前已知限制
 
-以下问题是当前代码状态的真实限制，不是 README 的遗漏：
+以下是当前真实限制，不是文档遗漏。后续目标见文末「未来目标」。
 
-- 本机 OpenSSH 到集群此前出现 `banner exchange: Connection to UNKNOWN port -1: Connection refused`，连接链路尚未打通；因此第九步只停留在计划层。
-- `config/execution/cluster.json` 的 `remote_root` 仍为 `null`，没有确认组内批准的远端运行根目录。
-- 尚未验证 Intel MPI 在单个白名单节点上的隔离、CPU 绑定、环境模块和 VASP 可执行文件路径。
-- 尚未实现真实 `launch`、异步状态监控、`cancel` 和受控 `retry`；当前仅有预检、计划、模拟和传输。
-- VASP 后处理已在第 12 步完成第一版：收敛状态、总能量、逐原子局域磁矩、总磁矩/磁化矢量、费米能、DOS 摘要与多源交叉校验，均用真实 CuMnAs 算例验证；但跨算例的不同磁序能量比较、MAE 汇总与结构化对比报告仍待实现，且尚未接入真实集群产出的实时结果。
-- Agent 的结构化工具协议与审批状态机已在第 11 步完成，并加入可选的 LangGraph 编排（OpenAI 兼容后端），已在真实端点上跑通多轮工具调用；仍未接入 MCP。官方 Wiki 已完成受控正文抽取和可追溯切块，BM25/Qdrant 混合检索、20 题离线评测和本地 MiniLM semantic embedding 已完成第一版。不能让 LLM 直接执行 SSH shell。
-- mCIF 的一般声明 BNS 与完整磁群身份自动核验、一般非共线纹理的物理旋转/MAE 契约、真实收敛测试仍未完成。
-
-当前已转向专业 VASP Agent/RAG 路线。第 10.3 步已经建立 BM25 基线并完成 20 题离线评测；第 10.4 步加入本地 Qdrant 向量索引、确定性哈希 embedding 和 BM25+向量 RRF 融合；第 10.6 步完成固定 revision 的本地 MiniLM embedding 及同题集对比。下一步定义带引用的 RAG 问答接口。真实 SSH、MPI smoke test、launch/monitor 和 OUTCAR/vasprun.xml 后处理仍保持禁用，待知识与工具边界稳定后按人工批准逐项推进。
+- 本机网页已有输入审核、Agent 会话和结果导入，但没有共享网站、首次配置向导或完整集群作业总览；运行中的 Agent 会话在服务重启后不保留。
+- 网页导入的 DOS/能带文本表格与同批 VASP 输出尚无自动来源绑定；图像用于查看外部表格，科学归属和能量参考仍需人工核对。
+- Agent 不能自批输入或资源；实时探测、资源方案、远程状态和结果回传等 `cluster_plan` 调用需要具名批准，`execution.smoke`、`execution.transfer`、`execution.launch` 还要各自获得一次 `cluster_execute` 批准。启动所需的最新探测、资源批准、smoke、传输核验和确认口令缺一不可；`cancel` / `retry` 仍不提供。
+- `AgentTranscript` 已允许具名批准后的固定集群动作记录为 `cluster_execution="controlled"`，LangGraph `interrupt` / `resume` 覆盖 `cluster_plan` 与 `cluster_execute`。FeO 候选的分段工具计划已用于真实集群，单个自然语言目标全程自主运行尚未实测。
+- FeO 由 mCIF 生成的输入卡仍可能是 `pending`；没有人工审核就没有可学习的 lesson。
+- Mn3Al DOS/Band 还没有用 SCF 的 CHGCAR 另开 `run_id` 启动。
+- 知识索引不会自动包含新文档，需要按 `docs/knowledge/` 重建 BM25/向量索引。
+- 其余白名单节点的主机密钥、常规 probe 尚未当作「已全覆盖」。
+- mCIF 的一般声明 BNS 与完整磁群身份自动核验、一般非共线纹理的物理旋转/MAE 契约仍未完成。
 
 ## 历史审计与测试
 
@@ -577,7 +653,7 @@ uv run --frozen magvasp knowledge evidence `
 
 状态含义：`evidence_missing` 表示没有可用证据；`review_required` 表示存在未验证引用、缺少要求的来源类型或任务显式要求人工审核；只有全部引用均已验证且来源要求齐全时才会得到 `evidence_ready`。无论状态如何，证据包都不能直接修改 INCAR/KPOINTS/POTCAR、上传文件或执行 SSH。
 
-本轮新增了证据包严格模型、CLI、防覆盖写入、引用 provenance 和风险测试。定向知识测试为 `29 passed`，最终全量测试为 `440 passed, 1 skipped`，`git diff --check` 通过。本机未安装 Ruff，因此没有把 Ruff 检查记为通过。实际 CLI 已生成 `var/knowledge/evidence/noncollinear-magmom.json`：包含 5 条官方引用，由于这些 Wiki chunk 尚未针对目标 VASP 5.4.4 完成人工版本确认且命令显式要求复核，状态正确地返回 `review_required`。
+第 10.5 阶段新增了证据包严格模型、CLI、防覆盖写入、引用 provenance 和风险测试。当时的历史测试快照为定向知识测试 `29 passed`、全量测试 `440 passed, 1 skipped`；这不是当前全量测试统计。当时本机未安装 Ruff，因此没有把 Ruff 检查记为通过。实际 CLI 已生成 `var/knowledge/evidence/noncollinear-magmom.json`：包含 5 条官方引用，由于这些 Wiki chunk 尚未针对目标 VASP 5.4.4 完成人工版本确认且命令显式要求复核，状态正确地返回 `review_required`。
 
 ## 第 10.6 步：Windows CLI 与本地多语言 embedding
 
@@ -610,9 +686,9 @@ uv run --frozen magvasp knowledge evaluate `
 
 原始评测报告保存在 Git 忽略的 `var/knowledge/evaluation-10.6-{bm25,hash,minilm}.json`；正式说明见 [`docs/knowledge/embedding_evaluation.md`](docs/knowledge/embedding_evaluation.md)。MiniLM 提升了来源类型和证据词覆盖，但仍有未命中或需人工检查的问题，不能解除 `draft_only` 边界。
 
-## 当前 RAG 下一步
+## 第 10.8–10.9 步之后的 RAG 边界
 
-第 10.8 步已完成：在保持 `draft_only` 的前提下加入回答草稿的人工审核工作流和冲突标注，仍不连接真实集群。回答草稿只能引用证据包中存在的编号，缺失、冲突或未验证证据时保持人工审核状态。第 10.9 步增加了离线结构化问答协议，将检索、证据包和草稿组合为单一响应对象；它仍不调用 LLM、不执行远程动作，也不产生可执行状态。
+第 10.8 步已完成：在保持 `draft_only` 的前提下加入回答草稿的人工审核工作流和冲突标注。回答草稿只能引用证据包中存在的编号。第 10.9 步增加了离线结构化问答协议。知识回答仍然不能修改输入或启动集群。第 14 步之后，Reference_Demo / skill 文档要重建索引才能被检索到；每人 usage 是本机可选来源。
 
 ## 第 10.7 步：带引用的回答草稿
 
@@ -671,13 +747,13 @@ uv run --frozen magvasp knowledge answer `
 
 分层：`agent/tool_models.py`（协议与 SHA256 溯源类型）、`agent/tools.py`（工具注册表）、`agent/approval.py`（分级审批）、`agent/runner.py`（`AgentPlan` → `AgentTranscript`）、`agent/llm_config.py`（密钥只从环境变量读的 LLM 配置）、`agent/graph.py`（仅在安装 `langgraph`/`langchain` 时可用的薄绑定）。
 
-选用 LangGraph 而非 CrewAI 的原因：本项目的“智能”很窄——把目标翻译成一串受门控的类型化工具调用；LangGraph 的图 + `interrupt` 模型与已有的审批状态机同构,`cluster_plan` 的“等人工批准”就是一个 `interrupt` 节点,人在环是一等公民,依赖也比 CrewAI 轻。核心四件套框架无关,换编排只动 `agent/graph.py`、`agent chat` 命令与可选 extra;审批/校验/溯源逻辑不变。
+选用 LangGraph 而非 CrewAI 的原因：本项目的“智能”很窄——把目标翻译成一串受门控的类型化工具调用；LangGraph 的图 + `interrupt` 模型与已有的审批状态机同构,`cluster_plan` / `cluster_execute` 的“等人工批准”就是一个 `interrupt` 节点,人在环是一等公民,依赖也比 CrewAI 轻。核心四件套框架无关,换编排只动 `agent/graph.py`、`agent chat` 命令与可选 extra;审批/校验/溯源逻辑不变。
 
 ### 硬边界
 
 - LLM 只能调用注册表里的工具；不接受任何自由格式的 shell/SSH/MPI 字符串。工具参数先过类型化 `StrictModel`，输出仍过现有确定性校验器。
-- 风险分四级：`read_only` 自动放行；`local_write` 放行但记录；`cluster_plan`（仅 `execution.transfer_plan`，无 `--connect`）需显式人工批准且必须有具名 approver（LangGraph 路径下用 `interrupt` 暂停等批准）；`cluster_execute`（launch/cancel/retry）永不注册、始终硬阻塞。
-- `AgentTranscript` 固定 `cluster_execution="disabled"`、`human_review_required=True`。POTCAR 内容不进入任何工具结果或发给 LLM；`potcar.build` 只返回 manifest。
+- 风险分四级：`read_only` 自动放行；`local_write` 放行但记录；`cluster_plan` 包含资源方案、`execution.probe_live`、`execution.topss_snapshot`、`execution.remote_status`、`execution.fetch` 和传输计划，需显式具名人工批准；`cluster_execute` 只注册固定的 `execution.smoke`、`execution.transfer`、`execution.launch`，每个调用都需独立具名批准并由运行时再次校验证据。两种高风险层在 LangGraph 路径下都用 `interrupt` 暂停；`cancel` / `retry` 不提供。
+- `AgentTranscript` 始终保持 `human_review_required=True`；固定集群动作经具名批准并成功执行时，`cluster_execution` 为 `controlled`，否则为 `disabled`。该字段不单独证明 VASP 已启动。POTCAR 内容不进入任何工具结果或发给 LLM；`potcar.build` 只返回 manifest。
 - API key 只从环境变量（默认 `MAGVASP_LLM_API_KEY`）读取，绝不写入配置文件、日志或提交到 Git，也不发往集群。
 
 ### 命令示例
@@ -697,7 +773,7 @@ uv run --frozen magvasp agent chat `
   --config config\agent\llm.json
 ```
 
-`config/agent/llm.example.json` 是不含密钥的示例配置，`api_key_env` 指向环境变量名而非密钥本身（LangGraph 路径会把配置里 `openai/<model>` 前缀去掉后传给 OpenAI 兼容客户端）。`agent chat` 产出的仍是需人工审核的 `AgentTranscript`，不代表任何计算已经执行；若命中 `cluster_plan` 会暂停并在 `pending_approvals` 中列出待批准调用。第 11 步不启用真实集群访问。LangGraph 路径已在一个真实 OpenAI 兼容端点上跑通多轮工具调用（读取 fixture 结构与 KPOINTS 并生成摘要），密钥只从环境变量读取、不入库。
+`config/agent/llm.example.json` 是不含密钥的示例配置，`api_key_env` 指向环境变量名而非密钥本身（LangGraph 路径会把配置里 `openai/<model>` 前缀去掉后传给 OpenAI 兼容客户端）。`agent chat` 产出的仍是需人工审核的 `AgentTranscript`，不代表任何计算已经执行；若命中 `cluster_plan` 或 `cluster_execute` 会暂停并在 `pending_approvals` 中列出待批准调用。早期第 11 步本身不启用真实集群访问；当前工作区的受控扩展才注册固定集群工具。LangGraph 路径已在一个真实 OpenAI 兼容端点上跑通多轮本地工具调用（读取 fixture 结构与 KPOINTS 并生成摘要），密钥只从环境变量读取、不入库；这不是 Agent 真实集群 E2E 记录。
 
 ## 第 12 步：VASP 输出后处理
 
@@ -710,6 +786,10 @@ uv run --frozen magvasp agent chat `
 
 后处理已注册为只读 Agent 工具 `postprocess.parse`（经审批门自动批准、执行、带哈希），因此 LLM 现在可以"读结果并总结"，但仍不触碰集群、不执行 VASP。
 
+项目同时提供受控的 `postprocess.vaspkit` 本地工具和 `postprocess.vaspkit_task` 通用数字任务入口。固定适配器基于 VASPKIT 1.5.1 的三个菜单：303 生成并校验 `KPATH.in`；211 校验 `KLABELS` 及 `REFORMATTED_BAND.dat`/`BAND.dat`（兼容旧小写名）；111 校验 `TDOS.dat`。预期输出必须由本次调用写入，旧文件不能冒充成功。通用入口只接受程序中存在的数字任务并记录变更文件哈希，其结果明确不代表科学验证。
+
+VASPKIT 适配器显式支持 `native` 和 `wsl` 后端，并记录程序 SHA256、可检测版本和执行环境；Windows 的 `native` 后端会拒绝仓库内的 Linux ELF。`wsl` 需要已安装的 Linux 发行版，并用固定参数直接执行程序，不经过 shell。`remote_ssh` 当前明确禁用，不能绕开集群审批控制面。`postprocess.plot_dos` 和 `postprocess.plot_band` 可将严格解析后的 VASPKIT 文本绘制为 PNG，并返回原始数据、标签及图片哈希；这仍不等于对物理参数或科学结论的验证。
+
 ### 命令示例
 
 ```powershell
@@ -718,6 +798,173 @@ uv run --frozen magvasp postprocess parse path\to\calc_dir
 
 # 人类可读摘要
 uv run --frozen magvasp postprocess show path\to\calc_dir
+
+# 已有 TDOS.dat 后生成态密度图；能带图另用 plot-band + --labels KLABELS
+uv run --frozen magvasp postprocess plot-dos path\to\TDOS.dat `
+  --output path\to\tdos.png
 ```
 
 离线单测用从真实 CuMnAs 算例裁剪出的紧凑 fixture（共线与 SOC 两套）；另有一组交叉校验测试在本机存在历史算例归档时才运行、否则自动跳过，用于用真实 OUTCAR/OSZICAR/vasprun.xml 验证三源一致。
+
+## 第 13 步：真实集群执行设计（默认禁用）
+
+第 13 步先完成真实集群执行的设计与闸门定义，目标是「本机 → `mu01` 跳板 → 白名单计算节点 → 单节点 MPI」。设计基线见 [`docs/execution/real_cluster_execution_design.md`](docs/execution/real_cluster_execution_design.md)。早期设计阶段的远程路径是 blocked；之后人用 CLI 已在 `cu22` 打通（第 13.1 节），当前工作区还提供受控的 Agent 探测、资源规划、smoke、传输、启动、远程状态和回传入口。骨架如下：
+
+1. **网络路径**：Agent 连接本机隧道 `127.0.0.1:17722`；工位电脑负责转发到 `192.168.164.203:7722`。登录后仍必须验证 `mu01`，再由 `mu01` 通过 `node_port=22` 进入计算节点。
+2. **gated 生命周期骨架**：`execution launch` / `status` / `cancel` 写入带哈希的 `run.record.json`。`local_simulation` 必须给出精确口令 `I_CONFIRM_LOCAL_LAUNCH`，只跑内置模拟进程。`remote_mpi` 必须同时具备：站点+身份合成且 `execution_enabled=true`、最新探测关联的人工资源批准、通过的 smoke 报告、已核验传输、精确口令 `I_CONFIRM_REMOTE_LAUNCH`。缺一项就写 `blocked`。`cancel` 只作用于本地、本程序启动、且现场命令行仍含 `SIMULATION ONLY` 标记的进程；拒绝远程或他人 PID。Agent 的 `execution.probe_live` / `topss_snapshot` / `remote_status` / `fetch` 属于 `cluster_plan`，固定的 `execution.smoke` / `transfer` / `launch` 属于 `cluster_execute`；FeO 候选的分段受控实测见顶部「当前进度」。
+
+```powershell
+# 本地模拟（需要精确确认口令）
+uv run --frozen magvasp execution launch `
+  --backend local_simulation `
+  --confirm I_CONFIRM_LOCAL_LAUNCH `
+  --output var\runs\local-sim
+
+uv run --frozen magvasp execution status --run var\runs\local-sim
+
+# 远程启动：必须同时给出已启用的 profile、通过的 smoke JSON、已核验 transfer 报告和精确口令
+uv run --frozen magvasp execution launch `
+  --backend remote_mpi `
+  --confirm I_CONFIRM_REMOTE_LAUNCH `
+  --profile config\execution\cluster.json `
+  --bundle path\to\bundle `
+  --request path\to\request.json `
+  --transfer-report path\to\transfer.json `
+  --smoke-report path\to\smoke.json `
+  --output var\runs\new-run-id
+```
+
+缺少任一证据时仍写 `blocked` 记录，不会启动 MPI。Agent 调用同一固定运行时入口；人工批准只放行本次具体调用，不能替代证据校验。
+
+## 第 13.1 步：cu22 上的 Mn3Al 真实 SCF
+
+人用 CLI（不是项目 LLM agent）在 `cu22` 启动了共线 SCF。输入包来自离线/agent 计划：ENCUT 600，MAGMOM `1.4 1.4 -2.8 0`，Gamma 18×18×18，POTCAR `Mn_pv`+`Al`。核数从 4 调到 16 再调到 **24 物理核 + NCORE=4**。
+
+- 远端：`/home/zyy/magvasp/runs/Mn3Al-scf-dos-band--Mn3Al-cu22-live-02/scf`
+- 本机结果：`var/agent-vasp-test-20260913/results-cu22-live-02/scf`
+- 解析 JSON：`var/agent-vasp-test-20260913/results-cu22-live-02/scf.result.json`
+
+作业已结束（约 60 分钟）。电子步 DAV 25，能量约 **−31.257 eV**（约 −7.814 eV/atom），`CHGCAR` 已写出。OSZICAR 净 `mag≈0` **不是磁矩塌掉**：局域磁矩约为 Mn +1.416、+1.416、−2.824，Al −0.023，与输入猜测一致。费米能约 9.48 eV；费米面态密度自旋极化很强（向上约 0.016，向下约 4.69），看起来是金属。`WAVECAR` 为空（`LWAVE=.FALSE.`）。
+
+```powershell
+uv run --frozen magvasp postprocess show `
+  var\agent-vasp-test-20260913\results-cu22-live-02\scf
+```
+
+这是 Mn3Al 电子 SCF 完成，不是科学结案。该 Mn3Al 算例的 DOS/Band 必须用**新的 `run_id`**，并依赖这份 SCF CHGCAR，目前还没启动。不要复用曾经失败的空目录 `Mn3Al-cu22-live-01`。
+
+确认口令：
+
+- 本地模拟：`I_CONFIRM_LOCAL_LAUNCH`
+- 远程 MPI / VASP：`I_CONFIRM_REMOTE_LAUNCH`
+- MPI smoke（不跑 VASP）：`I_CONFIRM_MPI_SMOKE`
+
+## 第 14 步：Skills 与 Reference_Demo（只读）
+
+`config/skills/catalog.json` 登记项目技能。Agent 工具 `skill.list` / `skill.show` / `skill.read` 与 CLI `magvasp skill` 只能读 Markdown，**永不执行** skill 目录里的脚本。Codex `.system` 技能被排除。Mail / WeRead / 截图 / GitHub 一类技能只登记为惰性条目。
+
+知识目录新增：
+
+- `reference-demo-library` → `Reference_Demo/Reference_Demo`（`.md` `.txt` `.bib`）
+- `agent-skill-library` → `skills/skills`（`.md`；跳过 `.git` / `.system`）
+
+`reference_data.txt` 按 `===` 切块。旧的 `var/knowledge/` BM25/向量索引**不会**自动含这些新文档，需要重建后才能被 `knowledge.search` 检索到。
+
+```powershell
+uv run --frozen magvasp skill list
+uv run --frozen magvasp skill show --id first-principles-calculation
+```
+
+## 第 15 步：从 mCIF 生成输入，并强制人工审核
+
+`workflow.from_mcif`（CLI 与 Agent 工具）把磁性 CIF 变成可审查的 workflow 请求：
+
+- MAGMOM 只能来自 mCIF（`moment_source=mcif`），调用方不能手填一套骗过闸门
+- `magnetic_mode=auto`：候选共线则共线，否则非共线
+- 对非共线候选强行要求共线会被拒绝
+- 不自动发明能带路径
+- 可选 `--include-dos`
+
+用户提供的三份 FeO mCIF（`mcif/candidate_0{1,2,3}_FeO_BNS2_7.mcif`）都解析为**共线**。本机已生成示例包：
+
+| 目录 | 来源 | MAGMOM（约） |
+| --- | --- | --- |
+| `var/feo-from-mcif-20260913/` | candidate_01 + DOS | `−1.418 +1.418 0 0` |
+| `var/feo-c02-agent-plan/` | candidate_02，经 `agent run-plan` | `−1.667 +1.667 0 0` |
+
+`workflow.build` 会写 `input.review.json`，状态 `pending` / `awaiting_human`。Agent **不能**代写审核。审核人不能是 `agent` / `llm` / `assistant` 等。`reject` / `revise` 必须写 notes。`accept` 不等于允许启动，也不等于科学收敛。
+
+对于磁矩方向扫描，Agent 使用 `workflow.mae_scan`：输入一个 SOC 基准 workflow 和方向字典（例如 `001: [0,0,1]`、`011: [0,1,1]`），生成每个方向独立的输入目录和哈希 manifest。工具只做本地生成，不提交或启动 VASP；方向会归一化、去重，并强制保持结构、赝势和其余 INCAR 参数一致。
+
+```powershell
+uv run --frozen magvasp workflow from-mcif --help
+
+uv run --frozen magvasp workflow review-card `
+  --bundle var\feo-c02-agent-plan\bundle
+
+uv run --frozen magvasp workflow review `
+  --bundle var\feo-c02-agent-plan\bundle `
+  --reviewer zyy --decision revise --tag hubbard `
+  --notes "FeO 还缺 Hubbard U，当前包不能当最终输入" `
+  --lesson "FeO 氧化物在接受前必须明确 U/J 或写明故意不做 DFT+U"
+
+uv run --frozen magvasp workflow reviews --reviewer zyy
+```
+
+审核后会追加 `var/reviews/input-reviews.jsonl`，并按人写本机知识 `var/reviews/usage/<用户名>.md`。下一张同类预览可带上 `prior_lessons`。notes/lesson 里不能出现密码或密钥模样的文本。
+
+## 第 16 步：全组站点与每人身份
+
+本组共用同一批节点和 `mu01`，但账号、连法、家目录不同。
+
+**可共享：** `config/execution/site.team.json`
+
+- 节点：`cu20 cu21 cu22 cu23 cu38 cu39 cu40 cu41 cu43 cu48 cu49 cu50`
+- `office`：工位 `192.168.164.203:7722`
+- `tunnel`：本机 `127.0.0.1:17722`（隧道由这台电脑维护，文件里不写 ZeroTier 或密码）
+- 远端模板：`/home/{user}/magvasp/runs`
+
+**本机私有（gitignore）：** `config/execution/identity.json`
+
+```powershell
+uv run --frozen magvasp execution compose `
+  --site config\execution\site.team.json `
+  --user alice --connection office `
+  --output config\execution\cluster.json
+```
+
+写成别人的 `/home/...` 会被拒绝。知识库索引共享站点模板和 `docs/knowledge/member_setup.md`，不索引个人 profile。说明见 [`docs/execution/cluster_profile.md`](docs/execution/cluster_profile.md)。
+
+## 未来目标
+
+下面是本机网页原型和受控真实运行之后的待办项。
+
+### 近期（先把现有闭环用起来）
+
+1. **验证审核经验复用**：FeO candidate_02 已有具名接受记录；再用 candidate_03 检查 `prior_lessons` 与按人 usage 是否正确出现。
+2. **审过才能 `execution.plan` / 传输 / launch**：未 `accept` 的包不能进入启动计划；Agent 的 `execution.transfer` 与 `execution.launch` 须分别获得具名人工批准，launch 还须全部运行证据。
+3. **Mn3Al DOS/Band**：新 `run_id`，用已拉回的 SCF `CHGCAR`，不覆盖原 SCF 叶目录。
+4. **重建知识索引**，让 Reference_Demo、skill 文档、组员配置说明能被 `knowledge.search` 检索。
+
+### 组员可安装使用
+
+5. **完善本机界面**：现有页面可上传 mCIF、查看并审核输入、启动 Agent 会话、导入结果；下一步补白名单节点与作业状态视图，以及用户名 + `office`/`tunnel` 首次配置向导。
+6. **安装形态**：在已有程序 + 本机页面上补首次配置。不随包装走某个人的隧道、账号或 `remote_root`。
+7. **知识分层**：全组策略与脱敏 lesson 可共享；个人 usage、密钥、POTCAR 只留本机。晋升为组知识必须再经人工审查。
+8. **其余白名单节点**：按需补主机密钥与 probe；`cu21` 启动前必须看最新占用，不得信号他人进程。
+
+### 明确不做，或很后才做
+
+9. 不把集群密码、私钥、POTCAR 正文交给 LLM 或网页表单。
+10. 不增加任意参数的 `cluster_execute`、`cancel` 或 `retry` 工具；固定的 `execution.smoke`、`execution.transfer`、`execution.launch` 保持类型化参数、逐调用人工批准和各自证据闸门。
+11. 不做「大家登录同一个服务器网站」的多租户控制面。
+12. 不把空闲快照当成独占分配，不做自动抢核、自动重试、跨节点 MPI、Slurm 适配（除非组内策略改变）。
+13. 不把电子步收敛或 `accept` 审核写成科学基态 / 能隙 / MAE 结论。
+
+### 更后的科学与产品能力
+
+14. `agent chat` 做成稳定的「一句话或一份 mCIF → 工具链 → 待审卡」，而不是一次一目标的调试命令。
+15. 在现有分段实测基础上，验证单个自然语言目标经人工审核完成真实 SCF/DOS/Band 全流程，并补齐运行现场的长期监控体验。
+16. 跨算例磁序能量比较、MAE 汇总、结构化对比报告。
+17. FeO 等氧化物的 DFT+U 进入类型化请求，而不是只靠审核 lesson 提醒。
+18. mCIF 声明 BNS 与完整磁群身份核验；真正非共线纹理的物理旋转 / MAE 契约。

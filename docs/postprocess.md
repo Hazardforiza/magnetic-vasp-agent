@@ -51,6 +51,35 @@ uv run --frozen magvasp postprocess show path\to\calc_dir
 
 后处理注册为只读 Agent 工具 `postprocess.parse`，经审批门自动批准并带哈希执行。LLM 因此可以"读结果并总结"，但仍不触碰集群、不执行 VASP。
 
+### VASPKIT 边界
+
+- `postprocess.vaspkit` 提供三个固定快捷任务：303 `band_kpoints` → `KPATH.in`；211 `band_dat` → `KLABELS` 加 `REFORMATTED_BAND.dat` 或 `BAND.dat`（仍识别旧适配器的小写 `band.dat`）；111 `tdos_dat` → `TDOS.dat`。输出必须由本次调用新建或改写，并通过对应格式解析，旧文件不能冒充成功。
+- `postprocess.vaspkit_catalog` 只读列出本地 VASPKIT 1.5.1 示例家族和当前适配器状态。
+- `postprocess.vaspkit_task` 是受限的数字任务入口：只接受程序中存在的 task id 和有界单行菜单输入，并记录本次变更文件及哈希。结果明确标为 `not_validated_generic_entry`，不能据此声称科学验证。
+- `native` 后端只运行与宿主兼容的本地程序；Windows 检测到 Linux ELF 会失败并提示使用 `wsl`。`wsl` 后端只使用固定的 `wslpath`、`uname` 和 `--exec` 参数，不经过 shell；它要求 Windows 已安装可用的 WSL 发行版。`remote_ssh` 当前明确禁用，不能绕开集群审批控制面。
+- 每次调用记录 VASPKIT 可执行文件路径、格式、大小、SHA256、可检测版本及宿主/WSL 环境。版本无法从运行横幅或同包 `changelog` 确认时记录为空，不猜测版本。
+- `postprocess.plot_dos` 与 `postprocess.plot_band` 分别严格读取上述 TDOS 和能带文本，用 Matplotlib 生成静态 PNG，并返回数据文件、`KLABELS`（能带）和图片的 SHA256。未知列布局、非有限数、坐标乱序或标签范围不匹配都会失败。
+
+```powershell
+# Windows + 已安装 WSL 发行版：从 DOSCAR 生成并校验 TDOS.dat
+uv run --frozen magvasp postprocess vaspkit path\to\dos `
+  --task tdos_dat --backend wsl `
+  --executable path\to\vaspkit
+
+# 从 EIGENVAL 等必需文件生成并校验能带文本
+uv run --frozen magvasp postprocess vaspkit path\to\band `
+  --task band_dat --backend wsl `
+  --executable path\to\vaspkit
+
+# 绘制静态图并输出带哈希的 JSON 清单
+uv run --frozen magvasp postprocess plot-dos path\to\TDOS.dat `
+  --output path\to\tdos.png
+uv run --frozen magvasp postprocess plot-band path\to\REFORMATTED_BAND.dat `
+  --labels path\to\KLABELS --output path\to\band.png
+```
+
+固定的 303/211/111 适配器现已具备文件级格式验证，但这仍不证明物理模型、收敛参数或科学结论正确。其他 DOS/PDOS、电荷、势能、磁性和声子任务仍需逐项增加版本化菜单参数、必需输入、预期输出与科学校验规则。
+
 ## 测试
 
 离线单测使用从真实 CuMnAs 算例裁剪出的紧凑 fixture（`tests/fixtures/postprocess/{collinear,soc}`）。另有一组交叉校验测试仅在本机存在历史算例归档（`vasp实例/CuMnAs_vasp`）时运行、否则自动跳过，用真实 `OUTCAR`/`OSZICAR`/`vasprun.xml` 验证三源一致。

@@ -2,9 +2,10 @@
 
 The runner walks the plan call by call: it looks each tool up in the registry,
 validates the typed arguments, asks the approval gate for a decision, and only
-then runs the deterministic function. It never calls an LLM and never connects
-to the cluster. On the first non-success outcome it halts, because later steps
-usually depend on earlier ones.
+then runs the deterministic function. It never calls an LLM. Registered cluster
+execution is limited to fixed, separately approved smoke, transfer, and launch
+tools. On the first non-success outcome it halts, because later steps usually
+depend on earlier ones.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from magnetic_vasp_agent.agent.tool_models import (
     ToolCall,
     ToolResult,
     sha256_of,
+    transcript_cluster_execution,
 )
 from magnetic_vasp_agent.agent.tools import Tool, ToolRegistry, default_registry
 
@@ -120,6 +122,34 @@ def evaluate_call(
         )
         return decision, result
 
+    if call.tool == "execution.resource_grant":
+        requested_approver = call.arguments.get("approver")
+        approved_by = decision.approver
+        if not (
+            isinstance(requested_approver, str)
+            and approved_by is not None
+            and requested_approver.strip() == approved_by.strip()
+        ):
+            blocked = ApprovalRecord(
+                call_id=call.call_id,
+                tool=call.tool,
+                risk_tier=tool.spec.risk_tier,
+                state=ApprovalState.BLOCKED,
+                reason=(
+                    "resource grant approver argument must match the named "
+                    "human who approved this cluster_plan call"
+                ),
+                approver=approved_by,
+            )
+            return blocked, ToolResult(
+                call_id=call.call_id,
+                tool=call.tool,
+                risk_tier=tool.spec.risk_tier,
+                approval_state=ApprovalState.BLOCKED,
+                status="blocked",
+                message=blocked.reason,
+            )
+
     return decision, _execute(call, tool)
 
 
@@ -129,7 +159,7 @@ def run_plan(
     policy: ApprovalPolicy | None = None,
     registry: ToolRegistry | None = None,
 ) -> AgentTranscript:
-    """Run a typed plan and return an auditable transcript. No LLM, no cluster."""
+    """Run a typed plan through the same approval gates used by LangGraph."""
 
     policy = policy or ApprovalPolicy()
     registry = registry or default_registry()
@@ -151,4 +181,5 @@ def run_plan(
         results=results,
         approvals=approvals,
         status=status,
+        cluster_execution=transcript_cluster_execution(results, approvals),
     )
