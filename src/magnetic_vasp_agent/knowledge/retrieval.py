@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
 import tempfile
@@ -10,8 +11,7 @@ from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 
-from magnetic_vasp_agent.knowledge.embedding import LocalEmbedder, MODEL_NAME
-
+from magnetic_vasp_agent.knowledge.embedding import MODEL_NAME, LocalEmbedder
 from magnetic_vasp_agent.knowledge.models import (
     KnowledgeCatalog,
     KnowledgeLocationType,
@@ -20,19 +20,19 @@ from magnetic_vasp_agent.knowledge.models import (
     RagEvaluationSuite,
 )
 from magnetic_vasp_agent.knowledge.retrieval_models import (
+    CITATION_MARKER_PATTERN,
     AnswerDraft,
     AnswerDraftClaim,
-    AnswerDraftReviewReason,
     AnswerDraftReview,
+    AnswerDraftReviewReason,
     AnswerRequest,
     AnswerResponse,
-    EvidenceConflict,
     CitationIntegrity,
-    CITATION_MARKER_PATTERN,
+    CitedEvidence,
     EvaluationCaseResult,
     EvaluationReport,
-    CitedEvidence,
     Evidence,
+    EvidenceConflict,
     EvidencePackage,
     EvidenceRisk,
     RetrievalDocument,
@@ -131,49 +131,125 @@ def _load_wiki_documents(
     return documents, digest(manifest_bytes)
 
 
+INDEXABLE_LOCAL_SUFFIXES = {".md", ".txt", ".bib"}
+SKIP_DIRECTORY_NAMES = {
+    ".git",
+    ".system",
+    ".venv",
+    ".pytest_cache",
+    "__pycache__",
+    "node_modules",
+}
+
+
+def _split_local_text(path: Path, text: str, fallback_title: str) -> list[tuple[str, str]]:
+    suffix = path.suffix.lower()
+    if suffix == ".md":
+        blocks = re.split(r"(?=^#{1,6} )", text, flags=re.MULTILINE)
+        chunks: list[tuple[str, str]] = []
+        for block in blocks:
+            clean = block.strip()
+            if not clean:
+                continue
+            title = next(
+                (line.lstrip("#").strip() for line in clean.splitlines() if line.startswith("#")),
+                fallback_title,
+            )
+            chunks.append((title, clean))
+        return chunks
+    if suffix == ".bib":
+        blocks = re.split(r"(?=^@)", text, flags=re.MULTILINE)
+        chunks = []
+        for block in blocks:
+            clean = block.strip()
+            if not clean:
+                continue
+            key = re.search(r"^@\w+\{([^,\s]+)", clean, flags=re.MULTILINE)
+            title = key.group(1) if key else fallback_title
+            chunks.append((title, clean))
+        return chunks
+    if re.search(r"^===", text, flags=re.MULTILINE):
+        blocks = re.split(r"(?=^===)", text, flags=re.MULTILINE)
+        chunks = []
+        for block in blocks:
+            clean = block.strip()
+            if not clean:
+                continue
+            header = clean.splitlines()[0].strip()
+            title = header[3:] if header.startswith("===") else fallback_title
+            chunks.append((title or fallback_title, clean))
+        return chunks
+    clean = text.strip()
+    return [(fallback_title, clean)] if clean else []
+
+
+def _local_source_files(source: KnowledgeSource, root: Path) -> list[Path]:
+    if not source.path:
+        return []
+    candidate = root / _safe_relative(source.path)
+    if not candidate.exists():
+        if source.required:
+            raise FileNotFoundError(f"local knowledge source is missing: {source.id}")
+        return []
+    path = candidate.resolve(strict=True)
+    if path.is_symlink():
+        raise ValueError(f"local knowledge source is linked: {source.id}")
+    if source.location_type == KnowledgeLocationType.LOCAL_FILE:
+        if not path.is_file():
+            raise ValueError(f"local knowledge file is missing: {source.id}")
+        return [path] if path.suffix.lower() in INDEXABLE_LOCAL_SUFFIXES else []
+    if source.location_type != KnowledgeLocationType.LOCAL_DIRECTORY:
+        return []
+    if not path.is_dir():
+        raise ValueError(f"local knowledge directory is missing: {source.id}")
+    allowed = {extension.lower() for extension in source.extensions} or INDEXABLE_LOCAL_SUFFIXES
+    files: list[Path] = []
+    for current_root, directory_names, file_names in os.walk(path, followlinks=False):
+        directory_names[:] = [
+            name
+            for name in directory_names
+            if name not in SKIP_DIRECTORY_NAMES and not (Path(current_root) / name).is_symlink()
+        ]
+        for name in file_names:
+            candidate = Path(current_root) / name
+            if candidate.is_symlink() or candidate.suffix.lower() not in allowed:
+                continue
+            if candidate.suffix.lower() not in INDEXABLE_LOCAL_SUFFIXES:
+                continue
+            files.append(candidate)
+    files.sort(key=lambda item: item.as_posix().casefold())
+    return files
+
+
 def _load_local_markdown(
     source: KnowledgeSource, root: Path
 ) -> list[RetrievalDocument]:
-    if source.location_type != KnowledgeLocationType.LOCAL_FILE or not source.path:
-        return []
-    if Path(source.path).suffix.lower() != ".md":
-        return []
-    path = (root / _safe_relative(source.path)).resolve(strict=True)
-    if path.is_symlink() or not path.is_file():
-        raise ValueError(f"local Markdown source is missing or linked: {source.id}")
-    relative = path.relative_to(root).as_posix()
-    text = path.read_text(encoding="utf-8")
-    if not text.strip():
-        return []
-    if len(text) > MAX_TEXT_CHARS:
-        raise ValueError(f"local Markdown source is too large: {source.id}")
-    blocks = re.split(r"(?=^#{1,6} )", text, flags=re.MULTILINE)
-    documents = []
-    for index, block in enumerate(blocks):
-        clean = block.strip()
-        if not clean:
-            continue
-        title = next(
-            (line.lstrip("#").strip() for line in clean.splitlines() if line.startswith("#")),
-            source.title,
-        )
-        documents.append(
-            RetrievalDocument(
-                schema_version=1,
-                document_id=f"{source.id}--{index:04d}",
-                source_id=source.id,
-                source_type=source.source_type,
-                authority=source.authority,
-                source_validated=source.validated,
-                title=title,
-                local_relative_path=relative,
-                section_path=[title],
-                text=clean,
-                text_sha256=digest(clean.encode("utf-8")),
-                tasks=source.tasks,
-                magnetic_modes=source.magnetic_modes,
+    documents: list[RetrievalDocument] = []
+    file_index = 0
+    for path in _local_source_files(source, root):
+        text = path.read_text(encoding="utf-8")
+        relative = path.relative_to(root).as_posix()
+        for title, clean in _split_local_text(path, text, source.title):
+            if len(clean) > MAX_TEXT_CHARS:
+                raise ValueError(f"local knowledge chunk is too large: {source.id}")
+            documents.append(
+                RetrievalDocument(
+                    schema_version=1,
+                    document_id=f"{source.id}--{file_index:04d}",
+                    source_id=source.id,
+                    source_type=source.source_type,
+                    authority=source.authority,
+                    source_validated=source.validated,
+                    title=title,
+                    local_relative_path=relative,
+                    section_path=[title],
+                    text=clean,
+                    text_sha256=digest(clean.encode("utf-8")),
+                    tasks=source.tasks,
+                    magnetic_modes=source.magnetic_modes,
+                )
             )
-        )
+            file_index += 1
     return documents
 
 
@@ -243,6 +319,43 @@ def build_bm25_index(
         raise
 
 
+def build_document_index(
+    documents: list[RetrievalDocument], output: Path, *, corpus_payload: bytes
+) -> RetrievalIndexManifest:
+    """Build an immutable BM25 corpus from reviewed, explicitly supplied documents.
+
+    This entry point deliberately has no Wiki/catalog dependency. The caller owns
+    its source provenance; the resulting corpus uses the same integrity checks and
+    retrieval implementation as the catalog-backed index.
+    """
+    if not documents or len(documents) > MAX_DOCUMENTS:
+        raise ValueError("document corpus must contain between 1 and 10000 chunks")
+    if len({item.document_id for item in documents}) != len(documents):
+        raise ValueError("document identifiers must be unique")
+    if any(len(item.text) > MAX_TEXT_CHARS or digest(item.text.encode("utf-8")) != item.text_sha256
+           for item in documents):
+        raise ValueError("document text exceeds bounds or its digest does not match")
+    if output.exists() or output.is_symlink():
+        raise FileExistsError("index exists; choose a new output directory")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".magvasp-corpus-stage-", dir=output.parent))
+    try:
+        lines = b"".join(_json_line(item.model_dump(mode="json")) for item in documents)
+        manifest = RetrievalIndexManifest(
+            schema_version=1, index_kind="bm25", catalog_sha256=digest(corpus_payload),
+            tokenizer_version=TOKENIZER_VERSION, document_count=len(documents),
+            documents_relative_path="documents.jsonl", documents_sha256=digest(lines),
+            source_types=sorted({item.source_type for item in documents}, key=lambda item: item.value),
+        )
+        (staging / "documents.jsonl").write_bytes(lines)
+        (staging / "manifest.json").write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        staging.rename(output)
+        return manifest
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+
 def _read_index(
     index: Path,
 ) -> tuple[RetrievalIndexManifest, list[RetrievalDocument], bytes]:
@@ -283,6 +396,12 @@ def _matches(document: RetrievalDocument, filters: RetrievalFilter) -> bool:
     ):
         return False
     return not filters.validated_only or document.source_validated
+
+
+def verify_bm25_index(index: Path) -> RetrievalIndexManifest:
+    """Verify a persisted corpus without ranking or exposing its document text."""
+    manifest, _documents, _payload = _read_index(index)
+    return manifest
 
 
 def _rank_documents(
