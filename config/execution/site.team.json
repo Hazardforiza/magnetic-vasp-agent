@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "site_id": "team-mu01",
+  "transport": "ssh_direct_mpi",
+  "gateway_hostname": "mu01",
+  "node_port": 22,
+  "allowed_nodes": [
+    "cu20",
+    "cu21",
+    "cu22",
+    "cu23",
+    "cu38",
+    "cu39",
+    "cu40",
+    "cu41",
+    "cu43",
+    "cu48",
+    "cu49",
+    "cu50"
+  ],
+  "vasp_module": "vasp/5.4.4-intel",
+  "wannier_module": "vasp/5.4.4-intel-wannier90",
+  "mpi_path": "/public/intel/oneapi/mpi/2021.1.1/bin/mpirun",
+  "vasp_paths": {
+    "vasp_std": "/public/vasp/vasp.5.4.4/bin/vasp_std",
+    "vasp_ncl": "/public/vasp/vasp.5.4.4/bin/vasp_ncl",
+    "vasp_gam": "/public/vasp/vasp.5.4.4/bin/vasp_gam"
+  },
+  "connections": [
+    {
+      "id": "office",
+      "gateway": "192.168.164.203",
+      "port": 7722,
+      "notes": "Workstation LAN to the mu01 SSH gateway. No password is stored here."
+    },
+    {
+      "id": "tunnel",
+      "gateway": "127.0.0.1",
+      "port": 17722,
+      "notes": "Local SSH tunnel on this computer. The workstation owns the forward; do not record ZeroTier addresses or passwords."
+    }
+  ],
+  "remote_root_template": "/home/{user}/magvasp/runs",
+  "notes": [
+    "mu01 is jump-only and must never run VASP or MPI.",
+    "There is no Slurm; jobs are single-node Intel MPI on one whitelisted cu node.",
+    "Use topsst.sh as a user-operated read-only occupancy reference; its output is advisory and never proves allocation.",
+    "Probe the selected node immediately before launch; never signal other users.",
+    "Each member supplies their own cluster username and connection in a private identity file."
+  ]
+}

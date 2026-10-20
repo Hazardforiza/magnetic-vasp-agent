@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "transport": "ssh_direct_mpi",
+  "gateway": "login.example.org",
+  "gateway_hostname": "login01",
+  "user": "cluster_user",
+  "port": 22,
+  "node_port": 22,
+  "allowed_nodes": ["node01", "node02"],
+  "vasp_module": "vasp/6.4.2-intel",
+  "lmod_path": "/opt/lmod/lmod/libexec/lmod",
+  "modulepath": "/opt/modules",
+  "mpi_path": "/opt/intel/mpi/bin/mpirun",
+  "vasp_paths": {
+    "vasp_std": "/opt/vasp/bin/vasp_std",
+    "vasp_ncl": "/opt/vasp/bin/vasp_ncl",
+    "vasp_gam": "/opt/vasp/bin/vasp_gam"
+  },
+  "execution_enabled": false,
+  "remote_root": null
+}

@@ -1,10 +1,27 @@
+# Nested clone metadata inside the literature demo
+Reference_Demo/**/.git/
+
 .venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
+/build/
+/dist/
 .pytest_cache/
 .coverage
 .env
+
+# Local research material, licensed binaries, and site-specific runtime state
+/Reference_Demo/
+/vaspkit.1.5.1/
+/vasp笔记/
+/mcif/
+/skills/
+/probe_cu*.json
+/unused.json
+/config/execution/cluster.json
+/config/execution/identity.json
+/config/execution/Mn3Al.cu22.*.json
 
 # Runtime metadata and generated calculations
 var/*
@@ -13,6 +30,9 @@ runs/
 
 # Local LLM config (only the example is tracked; the real one is user-specific)
 config/agent/llm.json
+
+# Per-member cluster identity. Compose it with the shared site template.
+config/execution/identity.json
 
 # Licensed VASP data and large calculation artifacts
 POTCAR
@@ -27,4 +47,3 @@ OUTCAR
 # Keep the compact, trimmed post-processing test fixtures (not real bulk data).
 !tests/fixtures/postprocess/**/OUTCAR
 !tests/fixtures/postprocess/**/vasprun.xml
-
