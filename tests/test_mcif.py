@@ -24,6 +24,7 @@ from magnetic_vasp_agent.workflow import (
     materialize_workflow,
     prepare_workflow,
 )
+from magnetic_vasp_agent.mcif_workflow import plan_workflow_from_mcif
 from magnetic_vasp_agent.workflow_models import CalculationStep, Workflow
 
 ROOT = Path(__file__).parents[1]
@@ -640,3 +641,53 @@ def test_checked_in_mcif_integration_workflow(potential_context, tmp_path):
         assert step.incar.LDAU is None
     materialize_workflow(result, tmp_path / "generated")
     assert inspect_bundle(tmp_path / "generated")["steps"] == 3
+
+
+def test_plan_workflow_from_mcif_auto_mode_and_dos(potential_context, tmp_path):
+    source = FIXTURES / PROVENANCE["files"][0]["file"]
+    request = tmp_path / "request.json"
+    report = plan_workflow_from_mcif(
+        [source],
+        request,
+        workflow_id="FeO-from-mcif",
+        magnetic_mode="auto",
+        include_dos=True,
+        notes="unit test only",
+    )
+    assert report["preview"][0]["magnetic_mode"] == "collinear"
+    assert report["preview"][0]["species_order"] == ["Fe", "O"]
+    assert "magmom" in report["preview"][0]
+    written = Workflow.model_validate_json(request.read_bytes())
+    assert [step.id for step in written.steps] == ["scf", "dos"]
+    assert written.steps[0].incar.moment_source == "mcif"
+    assert "magmom" not in written.steps[0].incar.model_dump(exclude_none=True)
+    result = prepare_workflow(written, *potential_context, request.parent)
+    materialize_workflow(result, tmp_path / "bundle")
+    inspect = inspect_bundle(tmp_path / "bundle")
+    assert inspect["integrity_valid"]
+    assert inspect["waiting_for_upstream"] == ["dos"]
+    incar = (tmp_path / "bundle" / "scf" / "INCAR").read_text(encoding="utf-8")
+    assert "ISPIN = 2" in incar
+    assert "LNONCOLLINEAR" not in incar or "LNONCOLLINEAR = .FALSE." in incar
+    assert "MAGMOM" in incar
+    with pytest.raises(FileExistsError):
+        plan_workflow_from_mcif([source], request)
+
+
+def test_plan_workflow_from_mcif_refuses_collinear_and_band_guess(tmp_path):
+    source = tmp_path / "canted.mcif"
+    source.write_bytes(
+        synthetic(rows=[("Fe1", "Fe", 0, 0, 0, 1, 0, 0), ("Fe2", "Fe", 0.5, 0.5, 0.5, 0, 1, 0)])
+    )
+    with pytest.raises(ValueError, match="MCIF_NONCOLLINEAR"):
+        plan_workflow_from_mcif(
+            [source],
+            tmp_path / "unused.json",
+            magnetic_mode="collinear",
+        )
+    with pytest.raises(ValueError, match="band"):
+        plan_workflow_from_mcif(
+            [FIXTURES / PROVENANCE["files"][0]["file"]],
+            tmp_path / "unused-band.json",
+            task="band",
+        )
