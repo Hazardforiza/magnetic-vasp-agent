@@ -8,8 +8,6 @@ from datetime import datetime
 from pathlib import Path
 
 from magnetic_vasp_agent.execution_models import (
-    MPI_PATH,
-    VASP_PATHS,
     Blocker,
     ClusterProfile,
     ExecutionRequest,
@@ -89,18 +87,25 @@ def prepare_execution(
     except (KeyError, TypeError, IndexError, AttributeError) as exc:
         raise ValueError("MANIFEST_CONTRACT: malformed workflow bundle") from exc
     blockers = [
-        Blocker(code="REMOTE_EXECUTION_DISABLED", message="Step 8 implements preparation only; no launch/upload/cancel API exists"),
         Blocker(code="MPI_CONFINEMENT_UNVERIFIED", message="Intel MPI single-host/pinning behavior still needs an approved smoke test"),
         Blocker(code="SCIENTIFIC_REVIEW_REQUIRED", message="Potential choice, U/J, magnetic state and convergence settings require review"),
         Blocker(code="REMOTE_DIRECTORY_UNVERIFIED", message="Remote storage, quota, permissions and absence of prior runs are unverified"),
     ]
+    if not profile.execution_enabled:
+        blockers.insert(
+            0,
+            Blocker(
+                code="REMOTE_EXECUTION_DISABLED",
+                message="ClusterProfile.execution_enabled is false; remote MPI/VASP stay blocked",
+            ),
+        )
     assessment = None
     cpus = request.cpu_ids
     if snapshot is None:
         blockers.append(Blocker(code="PREFLIGHT_REQUIRED", message="No current node snapshot was supplied"))
         blockers.append(Blocker(code="ALLOCATION_UNCONFIRMED", message="No group resource allocation is established"))
     else:
-        assessment = assess_resources(snapshot, request, now=now)
+        assessment = assess_resources(snapshot, request, now=now, profile=profile)
         cpus = assessment.suggested_cpu_ids
         blockers.extend(assessment.blockers)
         if not snapshot.executables[incar.executable]:
@@ -125,8 +130,8 @@ def prepare_execution(
         if profile.remote_root else None
     )
     mpi_argv = [
-        MPI_PATH, "-bootstrap", "fork", "-hosts", request.node,
-        "-n", str(request.mpi_ranks), VASP_PATHS[incar.executable],
+        profile.mpi_path, "-bootstrap", "fork", "-hosts", request.node,
+        "-n", str(request.mpi_ranks), profile.vasp_paths[incar.executable],
     ]
     environment = {"OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1", "I_MPI_PIN": "1"}
     if cpus:
@@ -137,7 +142,7 @@ def prepare_execution(
         preview_script = "\n".join([
             "#!/bin/bash", "# REVIEW ONLY. No resource allocation or runtime verification.",
             "exit 78", "set -eu", f'test "$(hostname -s)" = {request.node}',
-            'test "$(id -un)" = zyy', f"module load {profile.vasp_module}",
+            f'test "$(id -un)" = {shlex.quote(profile.user)}', f"module load {shlex.quote(profile.vasp_module)}",
             f"cd -- {shlex.quote(remote_directory)}",
             *[f"export {key}={shlex.quote(value)}" for key, value in environment.items()],
             "# This is not a validated launch script. Parent MPI environment must be audited.",
@@ -145,7 +150,7 @@ def prepare_execution(
         ])
     return {
         "schema_version": 1, "mode": "execution_preview", "ready_to_run": False,
-        "runtime_verified": False, "execution_enabled": False,
+        "runtime_verified": False, "execution_enabled": profile.execution_enabled,
         "workflow_id": manifest["workflow_id"], "bundle": str(bundle),
         "workflow_manifest_sha256": digest((bundle / "workflow.manifest.json").read_bytes()),
         "step_manifest_sha256": manifest["steps"][request.step_id]["manifest_sha256"],

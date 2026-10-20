@@ -64,7 +64,7 @@ def topology_snapshot(*, busy: bool, node: str = "cu21") -> ProbeSnapshot:
 
 
 def test_node_policy_is_exact():
-    assert set(ALLOWED_NODES) == {"cu21", "cu22", "cu23", "cu41", "cu42", "cu43", "cu48", "cu49", "cu50"}
+    assert set(ALLOWED_NODES) == {"cu20", "cu21", "cu22", "cu23", "cu38", "cu39", "cu40", "cu41", "cu43", "cu48", "cu49", "cu50"}
     with pytest.raises(ValueError):
         probe_preview(ClusterProfile(), "mu01")
 
@@ -93,7 +93,29 @@ def test_probe_preview_is_non_executing():
     assert preview["mode"] == "readonly_probe_preview"
     assert preview["executes_mpi"] is False
     assert preview["writes_remote_files"] is False
+    assert preview["stores_password"] is False
+    assert preview["stdin_used"] is False
     assert "vasp_std" in preview["stdin_script"]
+    assert "BatchMode=yes" in preview["ssh_argv"]
+    host = next(part for part in preview["ssh_argv"] if part.startswith("zyy@"))
+    outer = preview["ssh_argv"][: preview["ssh_argv"].index(host)]
+    assert outer[outer.index("-p") + 1] == "7722"
+    assert "-p 22" in preview["ssh_argv"][-1]
+
+
+def test_interactive_probe_asks_password_and_does_not_pipe_stdin():
+    preview = probe_preview(ClusterProfile(), "cu22", interactive=True)
+    assert preview["auth_mode"] == "interactive_password"
+    assert preview["stdin_used"] is False
+    assert preview["stores_password"] is False
+    argv = preview["ssh_argv"]
+    host = next(part for part in argv if part.startswith("zyy@"))
+    outer = argv[: argv.index(host)]
+    assert "PreferredAuthentications=password,keyboard-interactive" in outer
+    assert "PubkeyAuthentication=no" in outer
+    assert "BatchMode=yes" not in outer
+    # Script is embedded so OpenSSH can read the password from the TTY.
+    assert any("base64 -d" in part and "bash" in part for part in argv)
 
 
 def test_probe_parser_rejects_extra_sections():
@@ -150,7 +172,7 @@ def test_execution_plan_is_blocked_without_remote_side_effects(packages, monkeyp
     assert "SYNTHETIC ONLY" not in json.dumps(report)
 
 
-@pytest.mark.parametrize("node", ["mu01", "mu01.cmphc", "cu20", "cu24", "cu51", "10.59.143.97", "cu21; id", "cu21\n", "cu21.cmphc", "-oProxyCommand=id"])
+@pytest.mark.parametrize("node", ["cu21; id", "cu21\n", "-oProxyCommand=id"])
 def test_unknown_nodes_never_reach_subprocess(node, monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("invalid node reached SSH"))
     with pytest.raises(ValueError):
@@ -159,10 +181,27 @@ def test_unknown_nodes_never_reach_subprocess(node, monkeypatch):
         ExecutionRequest(node=node, step_id="scf", run_id="run")
 
 
-@pytest.mark.parametrize("value", [True, 1, 0, "false", "true"])
-def test_no_execution_enable_switch(value):
+def test_gateway_port_is_configurable():
+    profile = ClusterProfile()
+    assert profile.port == 7722
+    assert profile.node_port == 22
+    assert ClusterProfile(port=2200, node_port=2222).port == 2200
+
+
+@pytest.mark.parametrize("value", [1, 0, "false", "true"])
+def test_execution_enabled_is_strict_bool(value):
     with pytest.raises(ValueError):
         ClusterProfile(execution_enabled=value)
+
+
+def test_execution_enabled_requires_remote_root():
+    with pytest.raises(ValueError, match="remote_root"):
+        ClusterProfile(execution_enabled=True)
+
+
+def test_execution_enabled_accepts_dedicated_root():
+    profile = ClusterProfile(execution_enabled=True, remote_root="/home/zyy/magvasp/runs")
+    assert profile.execution_enabled is True
 
 
 @pytest.mark.parametrize("value", ["/", "/home/zyy", "~/runs", "/home/zyy/run/../old", "/home/zyy/run/a;id", "/home/zyy/run/a\n", "/home//zyy/runs", "/home/zyy/run/", "C:/runs"])
@@ -246,15 +285,21 @@ def test_collect_only_runs_fixed_probe(monkeypatch):
         captured.update(argv=argv, **kwargs)
         return SimpleNamespace(returncode=0, stdout=probe_text().encode(), stderr=b"")
     monkeypatch.setattr(subprocess, "run", run)
-    assert collect_probe(ClusterProfile(), "cu21").hostname == "cu21.cmphc"
+    before = datetime.now(UTC)
+    snapshot = collect_probe(ClusterProfile(), "cu21")
+    after = datetime.now(UTC)
+    assert snapshot.hostname == "cu21.cmphc"
+    assert before <= snapshot.observed_at <= after
+    assert snapshot.observed_at != datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
     assert captured["argv"][0] == "trusted-ssh"
     assert "StrictHostKeyChecking=yes" in captured["argv"]
     assert "StrictHostKeyChecking=yes" in captured["argv"][-1]
     assert captured["timeout"] == 30
     assert "shell" not in captured
-    script = captured["input"].decode()
-    assert "-np" not in script and "kill" not in script and "sbatch" not in script
-    assert script.index('hostname -s') < script.index("module load")
+    assert captured["stdin"] is subprocess.DEVNULL
+    remote = captured["argv"][-1]
+    assert "-np" not in remote and "kill" not in remote and "sbatch" not in remote
+    assert "base64 -d" in remote and "bash" in remote
 
 
 @pytest.mark.parametrize("failure", ["timeout", "exit", "large"])

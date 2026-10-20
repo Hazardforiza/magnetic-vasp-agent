@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
 
-from magnetic_vasp_agent.execution_models import ALLOWED_NODES, ClusterProfile
+from magnetic_vasp_agent.execution_models import ClusterProfile
 from magnetic_vasp_agent.execution_probe import SSH_OPTIONS
 from magnetic_vasp_agent.transfer_models import (
     TransferFile,
@@ -29,7 +29,7 @@ MAX_FILE_BYTES = 2**31
 MAX_TOTAL_BYTES = 2**32
 MAX_COMMAND_BYTES = 256_000
 MAX_OUTPUT_BYTES = 2_000_000
-TRANSFER_FILENAMES = frozenset((*INPUT_NAMES, "manifest.json", "workflow.manifest.json"))
+TRANSFER_FILENAMES = frozenset((*INPUT_NAMES, "manifest.json", "workflow.manifest.json", "input.review.json"))
 SFTP_OPTIONS = [
     "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
     "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes",
@@ -84,20 +84,23 @@ def _inventory(bundle: Path) -> TransferInventory:
     steps = top.get("steps")
     if not isinstance(order, list) or not isinstance(steps, dict) or set(order) != set(steps):
         raise ValueError("TRANSFER_MANIFEST: workflow order and steps are malformed")
-    expected_top = {"workflow.manifest.json", *steps}
+    # The review card is part of the auditable bundle and must travel with it.
+    has_review = (bundle / "input.review.json").is_file()
+    expected_top = {"workflow.manifest.json", *steps} | ({"input.review.json"} if has_review else set())
     actual_top = {item.name for item in bundle.iterdir()}
     if actual_top != expected_top:
         raise ValueError("TRANSFER_SCOPE: bundle contains unexpected top-level files")
     files: list[TransferFile] = []
     total = 0
-    for name in [*order, "workflow.manifest.json"]:
-        safe_id(name) if name != "workflow.manifest.json" else None
-        folder = bundle if name == "workflow.manifest.json" else bundle / name
-        if folder.is_symlink() or (folder.resolve().parent != bundle if name != "workflow.manifest.json" else False):
+    top_files = ["workflow.manifest.json"] + (["input.review.json"] if has_review else [])
+    for name in [*order, *top_files]:
+        safe_id(name) if name not in {"workflow.manifest.json", "input.review.json"} else None
+        folder = bundle if name in {"workflow.manifest.json", "input.review.json"} else bundle / name
+        if folder.is_symlink() or (folder.resolve().parent != bundle if name not in {"workflow.manifest.json", "input.review.json"} else False):
             raise ValueError("TRANSFER_SCOPE: symlinks are not transferable")
         names = ["workflow.manifest.json"] if name == "workflow.manifest.json" else [*INPUT_NAMES, "manifest.json"]
-        if name == "workflow.manifest.json":
-            paths = [folder / "workflow.manifest.json"]
+        if name in {"workflow.manifest.json", "input.review.json"}:
+            paths = [folder / name]
         else:
             if not folder.is_dir():
                 raise ValueError("TRANSFER_SCOPE: step entry is not a directory")
@@ -105,7 +108,7 @@ def _inventory(bundle: Path) -> TransferInventory:
                 raise ValueError(f"TRANSFER_SCOPE: {name} contains unexpected files")
             paths = [folder / filename for filename in names]
         for path in paths:
-            if path.is_symlink() or not path.is_file() or path.resolve().parent not in {bundle, folder.resolve()}:
+            if path.is_symlink() or not path.is_file() or (name not in {"workflow.manifest.json", "input.review.json"} and path.resolve().parent != folder.resolve()):
                 raise ValueError("TRANSFER_SCOPE: only regular files inside the bundle may be uploaded")
             size = path.stat().st_size
             total += size
@@ -118,16 +121,23 @@ def _inventory(bundle: Path) -> TransferInventory:
     return TransferInventory(workflow_id=workflow_id, files=files, total_bytes=total)
 
 
+def bundle_transfer_hashes(bundle: Path) -> dict[str, str]:
+    """Return the exact allowlisted inventory used by a bundle transfer."""
+
+    inventory = _inventory(bundle)
+    return {item.relative_path: item.sha256 for item in inventory.files}
+
+
 def _nested_ssh_argv(profile: ClusterProfile, node: str, remote_command: str) -> list[str]:
-    if node not in ALLOWED_NODES:
-        raise ValueError("NODE_FORBIDDEN: only the nine group compute nodes are allowed")
+    if node not in profile.allowed_nodes:
+        raise ValueError("NODE_FORBIDDEN: node is not in the configured cluster profile")
     if len(remote_command.encode("utf-8")) > MAX_COMMAND_BYTES:
         raise ValueError("remote command is too large")
     gateway_script = (
-        'test "$(hostname -s)" = mu01 || exit 91\n'
-        'test "$(id -un)" = zyy || exit 92\n'
+        f'test "$(hostname -s)" = {shlex.quote(profile.gateway_hostname)} || exit 91\n'
+        f'test "$(id -un)" = {shlex.quote(profile.user)} || exit 92\n'
         "exec ssh " + shlex.join([
-            *SSH_OPTIONS, "-p", str(profile.port), f"zyy@{node}",
+            *SSH_OPTIONS, "-p", str(profile.node_port), f"{profile.user}@{node}",
             "/bin/bash -s",
         ])
     )
@@ -143,18 +153,18 @@ def _remote_script(profile: ClusterProfile, node: str, body: str) -> tuple[list[
     script = (
         "set -eu\nexport LC_ALL=C\n"
         f'test "$(hostname -s)" = {node} || exit 91\n'
-        'test "$(id -un)" = zyy || exit 92\n'
+        f'test "$(id -un)" = {shlex.quote(profile.user)} || exit 92\n'
         f"{body}\n"
     ).encode()
     return argv, script
 
 
 def _sftp_argv(profile: ClusterProfile, node: str) -> list[str]:
-    if node not in ALLOWED_NODES:
-        raise ValueError("NODE_FORBIDDEN: only the nine group compute nodes are allowed")
+    if node not in profile.allowed_nodes:
+        raise ValueError("NODE_FORBIDDEN: node is not in the configured cluster profile")
     return [
         "sftp", *SFTP_OPTIONS, "-o", f"ProxyJump={profile.user}@{profile.gateway}:{profile.port}",
-        "-P", str(profile.port), f"{profile.user}@{node}",
+        "-P", str(profile.node_port), f"{profile.user}@{node}",
     ]
 
 
@@ -220,7 +230,7 @@ def build_transfer_plan(bundle: Path, profile: ClusterProfile, request: Transfer
         "transferred": False,
         "remote_hashes_verified": False,
         "remote_directory_created": False,
-        "execution_enabled": False,
+        "execution_enabled": profile.execution_enabled,
         "ssh_guard_argv": guard_argv,
         "ssh_guard_stdin": guard_stdin.decode("utf-8"),
         "sftp_argv": _sftp_argv(profile, request.node),

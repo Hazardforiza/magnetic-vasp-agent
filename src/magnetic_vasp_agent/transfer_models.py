@@ -60,6 +60,6 @@ class TransferReport(ExecutionModel):
     transferred: bool
     remote_hashes_verified: bool
     remote_directory_created: bool
-    execution_enabled: Literal[False] = False
+    execution_enabled: bool = False
     blockers: list[dict[str, str]] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
