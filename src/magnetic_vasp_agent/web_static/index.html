@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MagVASP 工作台</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/knowledge.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand" aria-label="MagVASP 工作台">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <span class="brand-copy"><strong>MagVASP</strong><small>计算工作台</small></span>
+      </div>
+      <nav class="main-nav" aria-label="主导航">
+        <a href="#projects" data-view="projects" class="nav-link active" aria-current="page"><span class="nav-mark" aria-hidden="true">01</span>项目</a>
+        <a href="#agent" data-view="agent" class="nav-link"><span class="nav-mark" aria-hidden="true">02</span>Agent</a>
+        <a href="#nodes" data-view="nodes" class="nav-link"><span class="nav-mark" aria-hidden="true">03</span>节点</a>
+        <a href="#results" data-view="results" class="nav-link"><span class="nav-mark" aria-hidden="true">04</span>结果</a>
+        <a href="#knowledge" data-view="knowledge" class="nav-link"><span class="nav-mark" aria-hidden="true">05</span>知识库</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <a href="#settings" data-view="settings" class="nav-link"><span class="nav-mark" aria-hidden="true">06</span>环境</a>
+        <div class="connection-line"><span class="status-dot" id="sidebar-status-dot"></span><span id="sidebar-status">正在连接</span></div>
+      </div>
+    </aside>
+
+    <div class="main-shell">
+      <header class="topbar">
+        <button class="mobile-menu icon-button" id="menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" title="打开导航">☰</button>
+        <div class="topbar-title" id="topbar-title">项目</div>
+        <span class="topbar-context">本机工作区</span>
+      </header>
+
+      <main id="main-content">
+        <section class="view active" id="view-projects" aria-labelledby="projects-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">WORKFLOWS</p><h1 id="projects-title">项目</h1></div>
+            <span class="page-count" id="project-count"></span>
+          </div>
+          <div class="projects-layout">
+            <div class="projects-primary">
+              <section class="section-block" aria-labelledby="new-project-title">
+                <div class="section-heading"><h2 id="new-project-title">生成输入方案</h2></div>
+                <form id="project-form" class="form-grid">
+                  <label class="field field-wide"><span>磁性结构文件</span><input id="project-file" name="file" type="file" accept=".mcif,.cif" required><small>mCIF / CIF</small></label>
+                  <label class="field"><span>任务</span><select name="task"><option value="static">静态自洽 SCF</option><option value="relax">结构弛豫</option><option value="magnetic_order">磁序候选比较</option><option value="convergence">ENCUT / k 点收敛</option><option value="mae">磁各向异性 MAE</option></select></label>
+                  <label class="field"><span>截断能 (eV)</span><input name="encut" type="number" min="1" step="1" value="600" required></label>
+                  <label class="field"><span>k 点间距 (Å⁻¹)</span><input name="spacing" type="number" min="0.01" max="1" step="0.01" value="0.25" required></label>
+                  <label class="checkbox-field" id="project-dos-option"><input name="include_dos" type="checkbox"><span>包含 DOS 步骤</span></label>
+                  <p class="field-hint field-wide" id="project-task-hint">磁序比较从 mCIF 磁矩生成候选翻转；MAE 需要共线磁矩，沿三个方向生成 SOC 步骤。</p>
+                  <fieldset class="resource-fields field-wide">
+                    <legend>计算资源</legend>
+                    <label class="field"><span>节点与核数</span><select name="resource_mode" id="project-resource-mode"><option value="llm">由 LLM 选择</option><option value="manual">手动指定</option></select></label>
+                    <div class="form-grid resource-manual" data-resource-manual hidden>
+                      <label class="field"><span>提交节点</span><select name="resource_node" aria-label="新项目提交节点"><option value="">请选择节点</option></select></label>
+                      <label class="field"><span>物理核数</span><input name="resource_mpi_ranks" type="number" min="1" max="1024" step="1" value="1"><small>每个物理核运行 1 个 MPI 进程</small></label>
+                      <div class="resource-probe-row field-wide"><button type="button" class="button button-small" data-resource-probe>检查节点状态</button></div>
+                      <div class="resource-node-preview field-wide" data-resource-preview aria-live="polite"></div>
+                    </div>
+                    <p class="resource-hint" data-resource-hint>生成项目后，LLM 可根据节点状态选择节点与核数。</p>
+                  </fieldset>
+                  <div class="form-actions"><button type="submit" class="button button-primary" id="project-submit">生成输入文件</button></div>
+                </form>
+                <div id="project-form-message" class="inline-message" role="status" aria-live="polite"></div>
+              </section>
+              <section class="section-block" aria-labelledby="project-list-title">
+                <div class="section-heading"><h2 id="project-list-title">输入方案</h2><button class="text-button" type="button" id="refresh-projects">刷新</button></div>
+                <div id="project-list" class="list-region" aria-live="polite"><div class="loading-line">正在读取项目...</div></div>
+              </section>
+            </div>
+            <section class="project-detail" id="project-detail" aria-labelledby="project-detail-title">
+              <div class="detail-empty"><div class="empty-glyph" aria-hidden="true">◇</div><h2 id="project-detail-title">选择一个项目</h2><p>输入文件和审核记录会显示在这里。</p></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-agent" aria-labelledby="agent-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">ASSISTANT</p><h1 id="agent-title">Agent</h1></div><span class="page-count" id="agent-config-state"></span></div>
+          <div class="agent-layout">
+            <section class="section-block" aria-labelledby="agent-goal-title">
+              <div class="section-heading"><h2 id="agent-goal-title">计算目标</h2></div>
+              <form id="agent-form">
+                <label class="field"><span>告诉 Agent 要完成的任务</span><textarea id="agent-goal" name="goal" rows="6" required placeholder="例如：根据 FeO 磁性结构生成 SCF 和 DOS 输入，并检查参数。"></textarea></label>
+                <div class="form-actions"><button type="submit" class="button button-primary" id="agent-submit">开始</button></div>
+              </form>
+              <div id="agent-form-message" class="inline-message" role="status" aria-live="polite"></div>
+            </section>
+            <section class="agent-progress" aria-labelledby="agent-run-title">
+              <div class="section-heading"><h2 id="agent-run-title">当前任务</h2><span id="agent-run-status" class="status-pill muted">未开始</span></div>
+              <div id="agent-session" class="list-region" aria-live="polite"><div class="empty-state compact"><div class="empty-glyph" aria-hidden="true">◎</div><p>暂无 Agent 任务</p></div></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-nodes" aria-labelledby="nodes-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">COMPUTE NODES</p><h1 id="nodes-title">节点</h1></div><span class="page-count" id="node-count"></span></div>
+          <div class="node-layout">
+            <div class="node-primary">
+              <section class="section-block" aria-labelledby="node-list-title">
+                <div class="section-heading"><h2 id="node-list-title">计算节点</h2><button class="text-button" type="button" id="refresh-nodes">刷新</button></div>
+                <div id="node-list" class="list-region" aria-live="polite"><div class="loading-line">正在读取节点...</div></div>
+              </section>
+              <div class="notice node-observation-note">节点状态来自最近一次只读探测，是瞬时观察，不代表资源分配或启动授权。</div>
+            </div>
+            <section class="node-detail" id="node-detail" aria-labelledby="node-detail-title">
+              <div class="detail-empty"><div class="empty-glyph" aria-hidden="true">◌</div><h2 id="node-detail-title">选择一个节点</h2><p>节点负载、运行时和 Wannier 能力会显示在这里。</p></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-results" aria-labelledby="results-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">ANALYSIS</p><h1 id="results-title">结果</h1></div><span class="page-count" id="result-count"></span></div>
+          <div class="results-layout">
+            <div class="results-primary">
+              <section class="section-block" aria-labelledby="result-import-title">
+                <div class="section-heading"><h2 id="result-import-title">导入计算结果</h2></div>
+                <form id="result-form">
+                  <label class="field"><span>VASP 输出文件</span><input name="files" type="file" multiple required><small>OSZICAR、OUTCAR、vasprun.xml；绘图可添加 TDOS.dat、BAND.dat / REFORMATTED_BAND.dat、KLABELS</small></label>
+                  <div class="form-actions"><button type="submit" class="button button-primary" id="result-submit">分析结果</button></div>
+                </form>
+                <div id="result-form-message" class="inline-message" role="status" aria-live="polite"></div>
+              </section>
+              <section class="section-block" aria-labelledby="result-list-title">
+                <div class="section-heading"><h2 id="result-list-title">分析记录</h2><button class="text-button" type="button" id="refresh-results">刷新</button></div>
+                <div id="result-list" class="list-region" aria-live="polite"><div class="loading-line">正在读取结果...</div></div>
+              </section>
+            </div>
+            <section class="result-detail" id="result-detail" aria-labelledby="result-detail-title"><div class="detail-empty"><div class="empty-glyph" aria-hidden="true">▤</div><h2 id="result-detail-title">选择一份结果</h2><p>收敛信息与图像会显示在这里。</p></div></section>
+          </div>
+        </section>
+
+        <section class="view" id="view-knowledge" aria-labelledby="knowledge-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">KNOWLEDGE</p><h1 id="knowledge-title">知识库</h1></div><button class="text-button" type="button" id="refresh-knowledge">刷新资料</button></div>
+          <p class="knowledge-intro">整理文献与计算经验，确认入库后供 Agent 检索并引用来源。相关摘录会提供给当前配置的模型。</p>
+          <div class="knowledge-scopes" aria-label="选择资料库">
+            <button type="button" class="knowledge-scope active" id="knowledge-scope-local" data-knowledge-scope="local" aria-pressed="true"><span class="knowledge-scope-heading"><strong>本地库</strong><span class="status-pill muted" data-library-state="local">正在读取</span></span><span class="knowledge-scope-description">仅保存在这台电脑，适合个人资料与草稿</span><span class="knowledge-scope-count" data-library-count="local">—</span></button>
+            <button type="button" class="knowledge-scope" id="knowledge-scope-shared" data-knowledge-scope="shared" aria-pressed="false"><span class="knowledge-scope-heading"><strong>共享库</strong><span class="status-pill muted" data-library-state="shared">正在读取</span></span><span class="knowledge-scope-description">使用课题组的共享目录，在多台电脑间共用</span><span class="knowledge-scope-count" data-library-count="shared">—</span></button>
+          </div>
+          <details class="knowledge-shared-settings" id="knowledge-shared-settings"><summary>配置共享库目录</summary><form id="knowledge-shared-form"><label class="field"><span>共享目录路径</span><input id="knowledge-shared-path" name="path" type="text" autocomplete="off" spellcheck="false" placeholder="例如：\\组内服务器\资料\MagVASP知识库"><small>每台电脑配置同一个网络共享目录，并确保当前用户有读写权限。留空可断开共享库。</small></label><div class="form-actions"><button type="submit" class="button" id="knowledge-shared-save">保存目录</button></div></form><div class="inline-message" id="knowledge-shared-message" role="status" aria-live="polite"></div></details>
+          <div id="knowledge-library-message" class="inline-message" role="status" aria-live="polite"></div>
+          <div class="knowledge-layout">
+            <div class="knowledge-primary">
+              <section class="section-block" aria-labelledby="knowledge-add-title">
+                <div class="section-heading"><h2 id="knowledge-add-title">添加到本地库</h2></div>
+                <div class="knowledge-add-tabs" role="tablist" aria-label="添加资料方式"><button type="button" class="tab active" role="tab" id="knowledge-tab-literature" aria-selected="true" aria-controls="knowledge-literature-panel" data-knowledge-add="literature">导入文献</button><button type="button" class="tab" role="tab" id="knowledge-tab-case" aria-selected="false" aria-controls="knowledge-case-panel" data-knowledge-add="case" tabindex="-1">记录案例</button></div>
+                <div role="tabpanel" id="knowledge-literature-panel" aria-labelledby="knowledge-tab-literature">
+                  <form id="knowledge-import-form" class="knowledge-form">
+                    <label class="field"><span>文献文件</span><input name="file" type="file" accept=".pdf,.md,.txt,.bib" required><small>PDF、Markdown、TXT、BibTeX；扫描 PDF 需先进行 OCR。</small></label>
+                    <label class="field"><span>标题（可选）</span><input name="title" type="text" maxlength="300" placeholder="默认使用文件名"></label>
+                    <label class="field"><span>DOI（可选）</span><input name="doi" type="text" maxlength="300" placeholder="10.xxxx/xxxx"></label>
+                    <label class="field"><span>标签（可选）</span><input name="tags" type="text" maxlength="1000" placeholder="例如：FeO, DFT+U, Wannier"><small>用逗号分隔材料、方法或任务。</small></label>
+                    <div class="form-actions"><button type="submit" class="button button-primary" id="knowledge-import-submit">解析并预览</button></div>
+                  </form>
+                </div>
+                <div role="tabpanel" id="knowledge-case-panel" aria-labelledby="knowledge-tab-case" hidden>
+                  <form id="knowledge-case-form" class="knowledge-form">
+                    <label class="field"><span>案例标题</span><input name="title" type="text" maxlength="300" required placeholder="例如：FeO 的 DFT+U 收敛经验"></label>
+                    <label class="field"><span>关联项目（可选）</span><select name="project_id" id="knowledge-case-project"><option value="">不关联项目</option></select></label>
+                    <label class="field"><span>关联结果（可选）</span><select name="result_id" id="knowledge-case-result"><option value="">不关联结果</option></select></label>
+                    <label class="field"><span>案例笔记</span><textarea name="text" rows="6" required placeholder="记录计算目标、参数、收敛情况、问题及处理方法。关联项目或结果的来源快照会单独保留。"></textarea></label>
+                    <label class="field"><span>标签（可选）</span><input name="tags" type="text" maxlength="1000" placeholder="例如：收敛, DFT+U"></label>
+                    <p class="knowledge-note">案例以“科学结论未核验”保存。输入审核通过或程序结束，都不等于结果已验证。</p>
+                    <div class="form-actions"><button type="submit" class="button button-primary" id="knowledge-case-submit">保存案例草稿</button></div>
+                  </form>
+                </div>
+                <div id="knowledge-import-message" class="inline-message" role="status" aria-live="polite"></div>
+              </section>
+              <section class="section-block" aria-labelledby="knowledge-list-title"><div class="section-heading"><h2 id="knowledge-list-title">本地资料</h2><span class="row-sub" id="knowledge-item-count"></span></div><div id="knowledge-list" class="list-region" aria-live="polite"><div class="loading-line">正在读取资料…</div></div></section>
+            </div>
+            <div class="knowledge-content">
+              <section class="knowledge-detail" id="knowledge-detail" aria-labelledby="knowledge-detail-title"><div class="detail-empty"><div class="empty-glyph" aria-hidden="true">▥</div><h2 id="knowledge-detail-title">选择或导入一份资料</h2><p>先检查解析文字，再确认入库。</p></div></section>
+              <section class="section-block knowledge-search" aria-labelledby="knowledge-search-title"><div class="section-heading"><h2 id="knowledge-search-title">测试知识检索</h2><span class="row-sub">与 Agent 使用同一资料库</span></div><form id="knowledge-search-form"><label class="field"><span>检索问题</span><textarea name="query" rows="2" required maxlength="1000" placeholder="例如：Wannier 投影轨道如何选择？"></textarea></label><div class="knowledge-search-actions"><label class="field"><span>检索范围</span><select name="scope"><option value="all">本地库 + 共享库</option><option value="local">仅本地库</option><option value="shared">仅共享库</option></select></label><button type="submit" class="button button-primary" id="knowledge-search-submit">检索</button></div></form><div id="knowledge-search-message" class="inline-message" role="status" aria-live="polite"></div><div id="knowledge-search-results" aria-live="polite"></div></section>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-settings" aria-labelledby="settings-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">LOCAL RUNTIME</p><h1 id="settings-title">环境</h1></div></div>
+          <section class="section-block settings-section" aria-labelledby="environment-title">
+            <div class="section-heading"><h2 id="environment-title">运行状态</h2><button class="text-button" type="button" id="refresh-status">重新检查</button></div>
+            <div id="environment-list" class="settings-list" aria-live="polite"><div class="loading-line">正在检查...</div></div>
+          </section>
+          <section class="section-block settings-section" aria-labelledby="access-title"><div class="section-heading"><h2 id="access-title">访问方式</h2></div><div class="setting-row"><span>服务位置</span><strong id="service-origin">本机</strong></div><div class="setting-row"><span>集群身份</span><strong>使用当前用户的本机配置</strong></div></section>
+        </section>
+      </main>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

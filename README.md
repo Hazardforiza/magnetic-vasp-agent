@@ -6,6 +6,31 @@
 
 ## 当前进度
 
+## 新功能概览 (2026年新增)
+
+### Web 界面
+- **启动命令**: `magvasp web` 或运行 `start-web.bat`
+- 本地浏览器访问（默认端口 8765，仅监听 127.0.0.1）
+- **功能**: 知识库浏览、输入文件生成与审核、Agent 会话运行、计算结果导入
+- 详细说明见 [`docs/web.md`](docs/web.md)
+
+### VASPKIT 集成
+- **DOS绘图**: `magvasp postprocess plot-dos --tdos TDOS.dat`
+- **能带绘图**: `magvasp postprocess plot-band --band BAND.dat --labels KLABELS`
+- **支持任务**: 303（能带KPATH生成）、211（能带重格式化）、111（态密度）
+- **后端**: 支持 `native` 和 `wsl` 执行环境
+
+### 磁性分析工具
+- **磁构型比较**: `magvasp magnetic-analysis compare`
+- **MAE计算**: `magvasp magnetic-analysis mae`
+- **交换相互作用**: `magvasp magnetic-analysis exchange`
+- **自旋结构可视化**: 分析磁性材料的自旋排布与能量关系
+
+### 课题组协作
+- **经验库管理**: `magvasp lesson search/conflicts/metrics`
+- **项目资源管理**: 组内计算案例与参数经验共享
+- **mCIF研究工作流**: 从磁性CIF到可审查输入的完整流程
+
 第 1–12 步的确定性内核、RAG 与 Agent 工具协议已经落地，并已提交（见下方里程碑表）。第 13 步之后的工作区还包含：**受控真实集群启动**、**Skills / Reference_Demo 只读接入**、**mCIF → 可审查输入包**、**人工输入审核与按人学习**、**全组站点模板 + 每人身份合成**和**本机网页工作台**。这些后半段多数仍在工作区，尚未全部提交。
 
 当前真实状态（2026-09-23）：
@@ -122,12 +147,27 @@ uv run --frozen pytest
 
 ## 本地环境
 
-推荐使用 Python 3.11 和锁文件：
+### 完整安装（包含所有功能）
+
+推荐使用 Python 3.11 和锁文件完整安装：
 
 ```powershell
 cd C:\Users\18355\magnetic-vasp-agent
-uv sync --extra dev --frozen
+# 安装所有依赖（包括 Web、Agent、VASPKIT 等）
+uv sync --all-extras --frozen
 uv run --frozen magvasp doctor
+```
+
+### 按需安装
+
+也可以按需选择功能模块：
+
+```powershell
+# 仅 Web 界面 + Agent
+uv sync --extra web --extra agent --frozen
+
+# 开发环境
+uv sync --extra dev --frozen
 ```
 
 `uv.lock` 固定依赖版本。不使用 uv 时也可安装开发环境，但下面的 pip 命令按版本范围解析依赖，不等同于锁文件安装：
