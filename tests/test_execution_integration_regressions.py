@@ -12,11 +12,11 @@ def test_agent_execution_plan_returns_prepared_report(tmp_path, monkeypatch):
     profile = tmp_path / "profile.json"
     request = tmp_path / "request.json"
     profile.write_text(ClusterProfile().model_dump_json())
-    request.write_text(ExecutionRequest(node="cu23", step_id="scf", run_id="r1").model_dump_json())
+    request.write_text(ExecutionRequest(node="node04", step_id="scf", run_id="r1").model_dump_json())
     report = {"mode": "execution_preview", "ready_to_run": False}
 
     def prepare(bundle, settings, intent, snapshot):
-        assert intent.node == "cu23"
+        assert intent.node == "node04"
         assert snapshot is None
         return report
 
@@ -33,12 +33,12 @@ def test_launch_checks_bundle_before_grant_workflow_match(tmp_path, monkeypatch)
     smoke = tmp_path / "smoke.json"
     transfer = tmp_path / "transfer.json"
     grant_file = tmp_path / "grant.json"
-    profile.write_text(ClusterProfile(execution_enabled=True, remote_root="/home/zyy/magvasp/runs").model_dump_json())
-    request.write_text(ExecutionRequest(node="cu23", step_id="scf", run_id="r1").model_dump_json())
-    smoke.write_text('{"passed":true,"mode":"mpi_smoke","node":"cu23"}')
+    profile.write_text(ClusterProfile(execution_enabled=True, remote_root="/home/cluster_user/magvasp/runs").model_dump_json())
+    request.write_text(ExecutionRequest(node="node04", step_id="scf", run_id="r1").model_dump_json())
+    smoke.write_text('{"passed":true,"mode":"mpi_smoke","node":"node04"}')
     transfer.write_text('{}')
     grant_file.write_text('{}')
-    monkeypatch.setattr(runtime, "transfer_report_model", lambda _: SimpleNamespace(node="cu23"))
+    monkeypatch.setattr(runtime, "transfer_report_model", lambda _: SimpleNamespace(node="node04"))
     monkeypatch.setattr(runtime, "ResourceGrant", SimpleNamespace(
         model_validate_json=lambda _: SimpleNamespace(matches_request=lambda _: True, workflow_id="other"),
     ))

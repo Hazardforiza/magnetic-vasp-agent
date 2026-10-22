@@ -22,7 +22,7 @@ from magnetic_vasp_agent.execution_runtime_models import (
 def _profile(**updates: object) -> ClusterProfile:
     values: dict[str, object] = {
         "execution_enabled": True,
-        "remote_root": "/home/zyy/magvasp/runs",
+        "remote_root": "/home/cluster_user/magvasp/runs",
     }
     values.update(updates)
     return ClusterProfile(**values)
@@ -55,8 +55,8 @@ def _record(**updates: object) -> RunRecord:
         "events": ["prepared", "running"],
         "owned_locally": False,
         "cluster_execution": "remote_mpi",
-        "node": "cu22",
-        "remote_directory": "/home/zyy/magvasp/runs/demo--run01/scf",
+        "node": "node03",
+        "remote_directory": "/home/cluster_user/magvasp/runs/demo--run01/scf",
         "remote_pid": 4321,
         "executable": "vasp_std",
     }
@@ -114,7 +114,7 @@ def test_previews_use_fixed_hardened_ssh_and_sftp(tmp_path: Path) -> None:
     assert "StrictHostKeyChecking=yes" in status["ssh_argv"]
     assert status["remote_directory"] not in " ".join(status["ssh_argv"])
     assert "/bin/bash -s" in status["ssh_argv"][-1]
-    assert 'test "$(hostname -s)" = cu22' in status["stdin_script"]
+    assert 'test "$(hostname -s)" = node03' in status["stdin_script"]
     assert "readlink -f" in status["stdin_script"]
     assert "tail -n 64" in status["stdin_script"]
 
@@ -122,7 +122,7 @@ def test_previews_use_fixed_hardened_ssh_and_sftp(tmp_path: Path) -> None:
     assert fetch["sftp_argv"][0] == "sftp"
     assert "BatchMode=yes" in fetch["sftp_argv"]
     assert "StrictHostKeyChecking=yes" in fetch["sftp_argv"]
-    assert "ProxyJump=zyy@192.168.164.203:7722" in fetch["sftp_argv"]
+    assert "ProxyJump=cluster_user@gateway.example.org:22" in fetch["sftp_argv"]
     assert fetch["sftp_batch"].count("get ") == 1
     assert fetch["sftp_batch"].endswith("bye\n")
     assert "test ! -L" in fetch["ssh_inventory_stdin"]
@@ -150,10 +150,10 @@ def test_record_hash_is_required_and_verified(
 @pytest.mark.parametrize(
     "remote_directory",
     [
-        "/home/zyy/other/demo--run01/scf",
-        "/home/zyy/magvasp/runs/demo--other/scf",
-        "/home/zyy/magvasp/runs/demo--run01/../POTCAR",
-        "/home/zyy/magvasp/runs//demo--run01/scf",
+        "/home/cluster_user/other/demo--run01/scf",
+        "/home/cluster_user/magvasp/runs/demo--other/scf",
+        "/home/cluster_user/magvasp/runs/demo--run01/../POTCAR",
+        "/home/cluster_user/magvasp/runs//demo--run01/scf",
     ],
 )
 def test_remote_directory_is_scoped_and_bound(remote_directory: str) -> None:
@@ -167,8 +167,8 @@ def test_remote_directory_is_scoped_and_bound(remote_directory: str) -> None:
     "profile",
     [
         _profile(gateway="jump,second"),
-        _profile(user="zyy@other"),
-        _profile(gateway_hostname="mu01%h"),
+        _profile(user="cluster_user@other"),
+        _profile(gateway_hostname="login01%h"),
     ],
 )
 def test_ssh_identity_tokens_cannot_change_route(profile: ClusterProfile) -> None:
@@ -178,8 +178,8 @@ def test_ssh_identity_tokens_cannot_change_route(profile: ClusterProfile) -> Non
 
 def test_node_pid_and_remote_backend_are_checked() -> None:
     for record in (
-        _record(node="cu42"),
-        _record(node="mu01"),
+        _record(node="node13"),
+        _record(node="login01"),
         _record(remote_pid=1),
         _record(backend=LaunchBackend.LOCAL_SIMULATION, cluster_execution="disabled"),
     ):

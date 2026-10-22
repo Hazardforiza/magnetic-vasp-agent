@@ -60,7 +60,7 @@ def _write_model(path: Path, model: object) -> None:
     path.write_bytes(json_bytes(payload))
 
 
-def _snapshot(observed_at: datetime, *, node: str = "cu21") -> ProbeSnapshot:
+def _snapshot(observed_at: datetime, *, node: str = "node02") -> ProbeSnapshot:
     cpus = [
         Cpu(cpu=index, core=index % 20, socket=(index % 20) // 10, online=True)
         for index in range(40)
@@ -69,15 +69,15 @@ def _snapshot(observed_at: datetime, *, node: str = "cu21") -> ProbeSnapshot:
         source="ssh_probe",
         observed_at=observed_at,
         requested_node=node,
-        hostname=f"{node}.cmphc",
-        username="zyy",
+        hostname=f"{node}.example.org",
+        username="cluster_user",
         cpus=cpus,
         allowed_cpu_ids=list(range(40)),
         processes=[],
         load1=0.0,
         mem_available_kib=8 * 1024 * 1024,
         module_loaded=True,
-        mpi_path="/public/intel/oneapi/mpi/2021.1.1/bin/mpirun",
+        mpi_path="/opt/intel/oneapi/mpi/bin/mpirun",
         executables={"vasp_std": True, "vasp_ncl": True, "vasp_gam": True},
     )
 
@@ -122,7 +122,7 @@ def evidence_context(tmp_path: Path) -> EvidenceContext:
     build_review_card(bundle, log_path=tmp_path / "reviews.jsonl")
     review = record_input_review(
         bundle,
-        reviewer="zyy",
+        reviewer="cluster_user",
         decision="accept",
         log_path=tmp_path / "reviews.jsonl",
     )
@@ -130,10 +130,10 @@ def evidence_context(tmp_path: Path) -> EvidenceContext:
     manifest = json.loads((bundle / "workflow.manifest.json").read_bytes())
     step_id = manifest["order"][0]
     profile = ClusterProfile(
-        execution_enabled=True, remote_root="/home/zyy/magvasp/runs"
+        execution_enabled=True, remote_root="/home/cluster_user/magvasp/runs"
     )
     execution = ExecutionRequest(
-        node="cu21", step_id=step_id, run_id="evidence-run", mpi_ranks=2
+        node="node02", step_id=step_id, run_id="evidence-run", mpi_ranks=2
     )
     observed_at = datetime.now(UTC) - timedelta(seconds=3)
     snapshot = _snapshot(observed_at)
@@ -142,7 +142,7 @@ def evidence_context(tmp_path: Path) -> EvidenceContext:
         profile,
         execution,
         snapshot,
-        approver="zyy",
+        approver="cluster_user",
         confirm=RESOURCE_GRANT_CONFIRM,
         now=observed_at,
         valid_for=timedelta(minutes=15),
@@ -152,7 +152,7 @@ def evidence_context(tmp_path: Path) -> EvidenceContext:
         node=execution.node,
         mpi_ranks=execution.mpi_ranks,
         cpu_ids=grant.cpu_ids,
-        hostname=f"{execution.node}.cmphc",
+        hostname=f"{execution.node}.example.org",
         started_at=observed_at + timedelta(seconds=1),
         finished_at=observed_at + timedelta(seconds=2),
         exit_code=0,
@@ -319,7 +319,7 @@ def test_missing_probe_blocks_launch(
     [
         ({"observed_at": datetime.now(UTC) - timedelta(minutes=2)}, "SNAPSHOT_STALE"),
         (
-            {"requested_node": "cu22", "hostname": "cu22.cmphc"},
+            {"requested_node": "node03", "hostname": "node03.example.org"},
             "PROBE_NODE_MISMATCH",
         ),
     ],
@@ -403,8 +403,8 @@ def test_resource_mismatched_smoke_evidence_blocks_launch(
     smoke = SmokeTestEvidence.model_validate(
         {
             **evidence_context.smoke.model_dump(),
-            "node": "cu22",
-            "hostname": "cu22.cmphc",
+            "node": "node03",
+            "hostname": "node03.example.org",
         }
     )
     _write_model(evidence_context.paths["smoke"], smoke)
@@ -418,8 +418,8 @@ def test_resource_mismatched_smoke_evidence_blocks_launch(
     [
         ({"workflow_id": "other-workflow"}, "workflow"),
         ({"run_id": "other-run"}, "run"),
-        ({"node": "cu22"}, "node"),
-        ({"remote_directory": "/home/zyy/magvasp/runs/other-run"}, "remote-dir"),
+        ({"node": "node03"}, "node"),
+        ({"remote_directory": "/home/cluster_user/magvasp/runs/other-run"}, "remote-dir"),
     ],
 )
 def test_transfer_identity_mismatch_blocks_launch(

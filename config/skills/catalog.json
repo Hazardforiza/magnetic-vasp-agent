@@ -4,8 +4,8 @@
   "skills": [
     {
       "id": "first-principles-calculation",
-      "title": "First-principles VASP to Wannier workflow",
-      "path": "skills/skills/first-principles-calculation",
+      "title": "First-principles VASP stage gates",
+      "path": "release_samples/skills/first-principles-calculation",
       "enabled": true,
       "scripts_allowed": false,
       "domains": ["vasp", "workflow", "acceptance"],
@@ -13,93 +13,12 @@
     },
     {
       "id": "analyze-pdf-reference",
-      "title": "Literature ingest into Reference_Demo",
-      "path": "skills/skills/analyze-pdf-reference",
+      "title": "Read-only literature ingest guidance",
+      "path": "release_samples/skills/analyze-pdf-reference",
       "enabled": true,
       "scripts_allowed": false,
       "domains": ["literature", "reference-demo"],
       "notes": "Guides faithful PDF records for the local reference library."
-    },
-    {
-      "id": "literature-conclusion-summary",
-      "title": "Literature conclusion summary",
-      "path": "skills/skills/literature-conclusion-summary",
-      "enabled": true,
-      "scripts_allowed": false,
-      "domains": ["literature"],
-      "notes": "Read-and-summarize only; does not mutate the library."
-    },
-    {
-      "id": "literature-conclusion-organizer",
-      "title": "Literature conclusion organizer",
-      "path": "skills/skills/literature-conclusion-organizer",
-      "enabled": true,
-      "scripts_allowed": false,
-      "domains": ["literature"],
-      "notes": "Organize verified conclusions; still draft_only for VASP inputs."
-    },
-    {
-      "id": "knowledge-point-organization",
-      "title": "Knowledge point organization",
-      "path": "skills/skills/knowledge-point-organization",
-      "enabled": true,
-      "scripts_allowed": false,
-      "domains": ["knowledge"],
-      "notes": "Structure notes; cannot promote personal notes to validated_case."
-    },
-    {
-      "id": "project-work-log",
-      "title": "Project work log",
-      "path": "skills/skills/project-work-log",
-      "enabled": true,
-      "scripts_allowed": false,
-      "domains": ["logging"],
-      "notes": "Session logging templates only."
-    },
-    {
-      "id": "program-change-notes",
-      "title": "Program change notes",
-      "path": "skills/skills/program-change-notes",
-      "enabled": true,
-      "scripts_allowed": false,
-      "domains": ["logging"],
-      "notes": "Change-note templates only."
-    },
-    {
-      "id": "github-update",
-      "title": "GitHub update notes",
-      "path": "skills/skills/github-update",
-      "enabled": true,
-      "scripts_allowed": false,
-      "domains": ["logging"],
-      "notes": "Instructional only; the agent has no git or GitHub tool."
-    },
-    {
-      "id": "read-mail",
-      "title": "Read mail",
-      "path": "skills/skills/read-mail",
-      "enabled": true,
-      "scripts_allowed": false,
-      "domains": ["external"],
-      "notes": "Catalogued for completeness; mail scripts are never executed."
-    },
-    {
-      "id": "weread-skills",
-      "title": "WeRead notes",
-      "path": "skills/skills/weread-skills",
-      "enabled": true,
-      "scripts_allowed": false,
-      "domains": ["external"],
-      "notes": "Catalogued for completeness; WeRead scripts are never executed."
-    },
-    {
-      "id": "cat-image-skill",
-      "title": "Cat image helper",
-      "path": "skills/skills/cat-image-skill",
-      "enabled": true,
-      "scripts_allowed": false,
-      "domains": ["external"],
-      "notes": "Catalogued for completeness; image scripts are never executed."
     }
   ]
 }

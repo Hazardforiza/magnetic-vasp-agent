@@ -23,20 +23,20 @@ def _write(path: Path, model: object) -> None:
     path.write_text(model.model_dump_json(), encoding="utf-8")  # type: ignore[attr-defined]
 
 
-def _snapshot(observed_at: datetime, *, node: str = "cu21") -> ProbeSnapshot:
+def _snapshot(observed_at: datetime, *, node: str = "node02") -> ProbeSnapshot:
     return ProbeSnapshot(
         source="ssh_probe",
         observed_at=observed_at,
         requested_node=node,
-        hostname=f"{node}.cmphc",
-        username="zyy",
+        hostname=f"{node}.example.org",
+        username="cluster_user",
         cpus=[Cpu(cpu=0, core=0, socket=0, online=True)],
         allowed_cpu_ids=[0],
         processes=[],
         load1=0,
         mem_available_kib=1024,
         module_loaded=True,
-        mpi_path="/public/intel/oneapi/mpi/2021.1.1/bin/mpirun",
+        mpi_path="/opt/intel/oneapi/mpi/bin/mpirun",
         executables={"vasp_std": True, "vasp_ncl": True, "vasp_gam": True},
     )
 
@@ -52,12 +52,12 @@ def _grant(now: datetime) -> ResourceGrant:
         input_sha256={
             name: "d" * 64 for name in ("POSCAR", "POTCAR", "INCAR", "KPOINTS")
         },
-        node="cu21",
+        node="node02",
         mpi_ranks=1,
         cpu_ids=[0],
         valid_from=now - timedelta(seconds=10),
         valid_until=now + timedelta(minutes=30),
-        approver="zyy",
+        approver="cluster_user",
         approved_at=now - timedelta(seconds=10),
     )
 
@@ -69,12 +69,12 @@ def _control_files(tmp_path: Path) -> tuple[Path, Path, Path]:
     grant_path = tmp_path / "grant.json"
     _write(
         profile_path,
-        ClusterProfile(execution_enabled=True, remote_root="/home/zyy/magvasp/runs"),
+        ClusterProfile(execution_enabled=True, remote_root="/home/cluster_user/magvasp/runs"),
     )
     _write(
         request_path,
         ExecutionRequest(
-            node="cu21", step_id="scf", run_id="run1", mpi_ranks=1, cpu_ids=[0]
+            node="node02", step_id="scf", run_id="run1", mpi_ranks=1, cpu_ids=[0]
         ),
     )
     _write(grant_path, _grant(now))
@@ -89,7 +89,7 @@ def test_agent_creates_typed_execution_and_transfer_requests(tmp_path: Path) -> 
     result = tools._run_execution_request_create(
         tools.ExecutionRequestCreateInput(
             profile=str(profile),
-            node="cu21",
+            node="node02",
             step_id="scf",
             run_id="run1",
             mpi_ranks=2,
@@ -122,7 +122,7 @@ def test_request_creation_rejects_nonallowlisted_node(tmp_path: Path) -> None:
         tools._run_execution_request_create(
             tools.ExecutionRequestCreateInput(
                 profile=str(profile),
-                node="cu42",
+                node="node13",
                 step_id="scf",
                 run_id="run1",
                 output=str(tmp_path / "request.json"),
@@ -135,7 +135,7 @@ def test_resource_grant_requires_cluster_plan_and_same_named_human() -> None:
         "bundle": "bundle",
         "profile": "profile.json",
         "request": "request.json",
-        "approver": "zyy",
+        "approver": "cluster_user",
         "confirm": "I_APPROVE_RESOURCE_GRANT",
         "probe_output": "probe.json",
         "output": "grant.json",
@@ -168,14 +168,14 @@ def test_resource_grant_adapter_probes_after_exact_approval(
 
     def fake_probe(profile, node):
         del profile
-        assert node == "cu21"
+        assert node == "node02"
         events.append("probe")
         return snapshot
 
     def fake_issue(bundle, profile, request, observed, output, **kwargs):
         del bundle, profile, request
         assert observed is snapshot
-        assert kwargs["approver"] == "zyy"
+        assert kwargs["approver"] == "cluster_user"
         assert kwargs["confirm"] == "I_APPROVE_RESOURCE_GRANT"
         events.append("grant")
         output.write_text(grant.model_dump_json(), encoding="utf-8")
@@ -190,7 +190,7 @@ def test_resource_grant_adapter_probes_after_exact_approval(
             bundle=str(tmp_path / "bundle"),
             profile=str(profile_path),
             request=str(request_path),
-            approver="zyy",
+            approver="cluster_user",
             confirm="I_APPROVE_RESOURCE_GRANT",
             probe_output=str(probe_output),
             output=str(grant_output),
@@ -214,7 +214,7 @@ def test_bad_grant_phrase_fails_before_any_probe(monkeypatch: pytest.MonkeyPatch
                 bundle="bundle",
                 profile="profile.json",
                 request="request.json",
-                approver="zyy",
+                approver="cluster_user",
                 confirm="yes",
                 probe_output="probe.json",
                 output="grant.json",

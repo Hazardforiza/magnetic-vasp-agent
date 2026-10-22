@@ -560,7 +560,7 @@ def create_app(
         return {
             "configured": True,
             "nodes": [{"name": node, "status": "unknown"} for node in profile.allowed_nodes
-                      if node.casefold() != "mu01"],
+                      if node.casefold() != profile.gateway_hostname.casefold()],
             "observation_note": _NODE_OBSERVATION_NOTE,
         }
 
@@ -571,7 +571,10 @@ def create_app(
         profile, error = load_execution_profile()
         if profile is None:
             raise HTTPException(503, error or "cluster profile is not configured")
-        if node.casefold() == "mu01" or node not in profile.allowed_nodes:
+        if (
+            node.casefold() == profile.gateway_hostname.casefold()
+            or node not in profile.allowed_nodes
+        ):
             raise HTTPException(404, "node is not in the configured cluster profile")
         return summarise_node_probe(profile, node)
 
@@ -784,7 +787,11 @@ def create_app(
                     except (KeyError, ValueError, TypeError) as exc:
                         raise HTTPException(422, "项目的资源选择无效，请重新选择。") from exc
                     profile, _ = load_execution_profile()
-                    if profile is None or request.node.casefold() == "mu01" or request.node not in profile.allowed_nodes:
+                    if (
+                        profile is None
+                        or request.node.casefold() == profile.gateway_hostname.casefold()
+                        or request.node not in profile.allowed_nodes
+                    ):
                         raise HTTPException(422, "已选节点不在当前配置中，请重新选择。")
                     if resources.selection.get("profile_sha256") != profile_fingerprint(profile):
                         raise HTTPException(409, "集群配置已更改，请重新检查资源。")

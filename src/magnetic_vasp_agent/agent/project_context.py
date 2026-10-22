@@ -51,8 +51,7 @@ def project_registry(
     profile = ClusterProfile.model_validate_json(profile_bytes)
 
     if (
-        request.node == "mu01"
-        or request.node == profile.gateway_hostname
+        request.node == profile.gateway_hostname
         or request.node not in profile.allowed_nodes
     ):
         raise ValueError("PROJECT_NODE_FORBIDDEN: select an allowlisted compute node")

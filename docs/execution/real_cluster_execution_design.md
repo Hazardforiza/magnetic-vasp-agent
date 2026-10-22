@@ -4,12 +4,12 @@
 
 ## 适用边界
 
-执行协议本身不绑定单一站点。以下值必须从部署提供的 `ClusterProfile` 读取：网关地址/主机名、用户名、端口、计算节点白名单、VASP 模块、MPI 路径和 VASP 可执行文件路径。本文中的 `mu01`、`zyy` 与 `cu21` 等是当前站点策略的示例，换集群时由新的 profile 替换，代码和 Agent 工具无需改写。
+执行协议本身不绑定单一站点。网关地址/主机名、用户名、端口、计算节点白名单、VASP 模块、MPI 路径和 VASP 可执行文件路径必须从部署提供的 `ClusterProfile` 读取。文中的主机名和节点名均为示例；实际授权以当前管理员批准的 profile 和本次人工资源授权为准。
 
-- SSH 入口、用户名和端口必须从当前操作者自己的 `ClusterProfile` 读取；当前站点示例为 `192.168.164.203:7722` 或本机隧道 `127.0.0.1:17722`，登录后必须验证短主机名为 `mu01` 和当前 identity 用户。
-- `mu01` 只能作为跳板，禁止在其上运行 VASP、MPI 或其他计算任务。
-- 当前站点计算节点只能是 `cu20`、`cu21`、`cu22`、`cu23`、`cu38`、`cu39`、`cu40`、`cu41`、`cu43`、`cu48`、`cu49`、`cu50`。`cu42` 不在当前白名单内。`cu21` 已知被其他用户占满物理核心，在新的人工确认前不得用于测试或运行。
-- 集群没有 Slurm。目标是获得组内批准的**单个节点**，在该节点上使用 Intel MPI 和 VASP 5.4.4。
+- SSH 入口、用户名和端口必须从当前操作者自己的 `ClusterProfile` 读取；登录后必须验证网关身份和当前 identity 用户。
+- 网关只能作为 SSH 入口或转发节点，禁止在其上运行 VASP、MPI 或其他计算任务。
+- 只能访问 profile 白名单中的计算节点；未列出的节点、历史探测和历史记录都不构成授权。
+- 运行调度方式、MPI 实现和 VASP 版本必须由管理员确认。执行协议不假设特定调度器。
 - 节点负载、进程列表、CPU 拓扑和 `PSR` 只能作为观察结果，不能证明独占资源或授权分配。
 - 默认/示例 profile 仍为 `execution_enabled=false`、`remote_root=null`；个人合成 profile 即使显式启用，也必须在目录归属、资源窗口和本次人工批准齐全后才能上传或启动。
 - 不得访问白名单外节点，不得读取、修改或删除其他用户的目录和进程，不得发送信号、取消或重启他人作业。
@@ -30,7 +30,7 @@
 | `draft` | workflow/step manifest、四个输入文件哈希、POTCAR manifest 哈希、VASP executable 和目标 step | 本地内存 | 输入包通过现有 workflow、INCAR、KPOINTS、POSCAR、POTCAR manifest 校验 |
 | `locally_validated` | 规范化计划及其哈希、依赖和科学参数审核记录 | 写本地计划/报告 | 所有上游 artifact 已验证，输入未被重写 |
 | `resource_approval_required` | 具名批准人、节点、时间窗口、MPI ranks、CPU ID、独占规则 | 无远端副作用 | 人工明确批准单节点资源；不能由 snapshot 自动推断 |
-| `preflight_passed` | gateway/node 身份、白名单检查、最新 topology/affinity/process/load/memory、module 和可执行文件路径、时间戳与哈希 | 只读 SSH | 入口为 `mu01`，目标为白名单节点，用户和主机身份匹配，`cu21` 未被重新批准 |
+| `preflight_passed` | gateway/node 身份、白名单检查、最新 topology/affinity/process/load/memory、module 和可执行文件路径、时间戳与哈希 | 只读 SSH | 入口身份、目标白名单、用户和主机身份全部匹配 |
 | `smoke_test_approval_required` | smoke test 命令摘要、CPU 绑定、预计时长和输出位置 | 无远端副作用 | 人工批准无科学结果的最小单节点 Intel MPI 测试 |
 | `smoke_test_passed` | stdout/stderr、退出码、主机名、rank map、绑定信息、开始/结束时间 | 仅运行批准的 smoke test | 单节点、绑定符合批准 CPU、无跨节点 rank、退出码为 0；失败立即停止 |
 | `transfer_approval_required` | 唯一远端叶目录、文件清单、逐文件本地哈希、目录归属和容量确认 | 无远端副作用 | 人工确认 `remote_root` 是已存在且组内批准的专用目录 |
@@ -44,7 +44,7 @@
 
 ## 预检与资源证明
 
-预检必须分两层执行：本机到 `mu01` 的 gateway identity，再由 `mu01` 通过固定内部 SSH 到一个已批准的计算节点。两层都验证 `hostname -s` 和 `id -un`，并拒绝把 `mu01` 当作计算节点。SSH 必须启用 `StrictHostKeyChecking=yes`、禁用 agent forwarding、端口转发和 ControlMaster；密码只可由人工终端输入，不能写入参数、环境变量、文件或日志。
+预检必须分两层执行：本机到配置网关的 identity，再由网关通过固定内部 SSH 到一个已批准的计算节点。两层都验证 `hostname -s` 和 `id -un`，并拒绝把网关当作计算节点。SSH 必须启用 `StrictHostKeyChecking=yes`、禁用 agent forwarding、端口转发和 ControlMaster；密码只可由人工终端输入，不能写入参数、环境变量、文件或日志。
 
 只读 probe 收集 CPU topology、进程观察、负载、可用内存、当前 affinity、模块状态、MPI 路径和三个固定 VASP executable 路径。snapshot 必须带时区时间戳和完整协议哈希；它是当时的观察，不是预约、独占或授权证明。启动前必须重新执行或确认仍在人工批准窗口内的最新预检。
 
@@ -92,7 +92,7 @@ MPI rank 数、CPU 绑定、VASP 版本和 INCAR 中 `NPAR`/`NCORE` 的一致性
   "workflow_manifest_sha256": "<64 hex>",
   "step_manifest_sha256": "<64 hex>",
   "input_sha256": {"POSCAR": "<64 hex>", "POTCAR": "<64 hex>", "INCAR": "<64 hex>", "KPOINTS": "<64 hex>"},
-  "node": "cu22",
+  "node": "node03",
   "remote_directory": "/approved/root/workflow--run",
   "mpi_ranks": 4,
   "cpu_ids": [0, 1, 2, 3],
@@ -131,7 +131,7 @@ MPI rank 数、CPU 绑定、VASP 版本和 INCAR 中 `NPAR`/`NCORE` 的一致性
 3. 记录失败阶段、固定错误码、退出码、时间戳、相关哈希和人工后续动作。
 4. 只有人工确认目录和作业归属后，才允许执行单独批准的回滚或取消。
 
-回滚只可停止本次已确认且归属于当前用户的作业；不得触碰其他 PID、共享目录或 `mu01` 上的任何计算进程。
+回滚只可停止本次已确认且归属于当前用户的作业；不得触碰其他 PID、共享目录或 `login01` 上的任何计算进程。
 
 ## 审计记录与 Agent 边界
 
@@ -145,7 +145,7 @@ Agent 只能调用注册表中的类型化工具：`execution.probe`、`executio
 
 - 状态机拒绝跳过 smoke test、传输核验或启动前人工闸门。
 - 过期或哈希变化的 snapshot、manifest、transfer report 不能进入 launch gate。
-- `mu01`、白名单外节点和当前被占满的 `cu21` 不能通过目标校验。
+- 配置网关和白名单外节点不能通过目标校验。
 - 未确认 `remote_root`、目录已存在、符号链接或远端哈希不匹配都会阻断。
 - smoke test 失败/超时不能启动 VASP，且不会自动重试。
 - retry 必须生成新的 `run_id` 和远端叶目录；原目录不可覆盖。

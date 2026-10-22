@@ -138,9 +138,9 @@ def test_agent_launch_converts_backend_and_forwards_snapshot(monkeypatch, tmp_pa
 
     captured = {}
     now = datetime.now(UTC)
-    profile = ClusterProfile(execution_enabled=True, remote_root="/home/zyy/magvasp/runs")
+    profile = ClusterProfile(execution_enabled=True, remote_root="/home/cluster_user/magvasp/runs")
     request = ExecutionRequest(
-        node="cu21", step_id="scf", run_id="run1", mpi_ranks=1, cpu_ids=[0]
+        node="node02", step_id="scf", run_id="run1", mpi_ranks=1, cpu_ids=[0]
     )
     grant = ResourceGrant(
         workflow_id="wf",
@@ -150,12 +150,12 @@ def test_agent_launch_converts_backend_and_forwards_snapshot(monkeypatch, tmp_pa
         step_manifest_sha256="b" * 64,
         run_sha256="c" * 64,
         input_sha256={name: "d" * 64 for name in ("POSCAR", "POTCAR", "INCAR", "KPOINTS")},
-        node="cu21",
+        node="node02",
         mpi_ranks=1,
         cpu_ids=[0],
         valid_from=now - timedelta(minutes=1),
         valid_until=now + timedelta(minutes=10),
-        approver="zyy",
+        approver="cluster_user",
         approved_at=now,
     )
     profile_path = tmp_path / "profile.json"

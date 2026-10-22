@@ -83,11 +83,11 @@ def test_local_csrf_and_project_review(web_client: tuple[TestClient, dict[str, s
     assert client.get("/api/projects").json()["projects"][0]["id"] == item_id
 
     reviewed = client.post(f"/api/projects/{item_id}/review", headers=headers,
-                           json={"reviewer": "zyy", "decision": "accept"})
+                           json={"reviewer": "cluster_user", "decision": "accept"})
     assert reviewed.status_code == 200, reviewed.text
     assert reviewed.json()["review_card"]["decision"] == "accept"
     assert client.post(f"/api/projects/{item_id}/review", headers=headers,
-                       json={"reviewer": "zyy", "decision": "accept"}).status_code == 409
+                       json={"reviewer": "cluster_user", "decision": "accept"}).status_code == 409
 
 
 @pytest.mark.parametrize(
@@ -140,11 +140,11 @@ def test_node_inventory_is_read_only_and_excludes_gateway(
     assert "gateway_hostname" not in payload
     assert "execution_enabled" not in payload
     names = [item["name"] for item in payload["nodes"]]
-    assert "mu01" not in names
+    assert "login01" not in names
     assert names == list(ClusterProfile().allowed_nodes)
     assert all(item["status"] == "unknown" for item in payload["nodes"])
     assert payload["observation_note"]
-    assert client.get("/api/nodes/mu01/probe").status_code == 404
+    assert client.get("/api/nodes/login01/probe").status_code == 404
 
 
 def test_node_inventory_reports_missing_profile(tmp_path: Path) -> None:
@@ -160,7 +160,7 @@ def test_node_inventory_reports_missing_profile(tmp_path: Path) -> None:
     assert inventory.status_code == 200
     assert inventory.json()["configured"] is False
     assert inventory.json()["nodes"] == []
-    assert client.get("/api/nodes/cu20/probe").status_code == 503
+    assert client.get("/api/nodes/node01/probe").status_code == 503
 
 
 def test_node_probe_redacts_processes_and_reports_wannier_capability(
@@ -169,7 +169,7 @@ def test_node_probe_redacts_processes_and_reports_wannier_capability(
     client, _ = web_client
     snapshot = ProbeSnapshot(
         source="offline_fixture", observed_at=datetime.now(UTC),
-        requested_node="cu20", hostname="cu20", username="zyy",
+        requested_node="node01", hostname="node01", username="cluster_user",
         cpus=[Cpu(cpu=0, core=0, socket=0, online=True)], allowed_cpu_ids=[0],
         processes=[ProcessObservation(pid=10, user="other", last_cpu=0, cpu_percent=0.1, command="secret-command")],
         load1=0.0, mem_available_kib=2 * 1024 * 1024, module_loaded=True,
@@ -177,14 +177,14 @@ def test_node_probe_redacts_processes_and_reports_wannier_capability(
         executables={"vasp_std": True, "vasp_ncl": True, "vasp_gam": True},
     )
     wannier = WannierProbeSnapshot(
-        source="offline_fixture", observed_at=snapshot.observed_at, requested_node="cu20",
-        hostname="cu20", username="zyy", module_name=ClusterProfile().wannier_module,
-        module_loaded=True, wannier90_path="/public/wannier90/3.1.0/bin/wannier90.x",
-        wannier90_version="3.1.0", vasp_ncl_path="/public/vasp/vasp.5.4.4/bin/vasp_ncl",
+        source="offline_fixture", observed_at=snapshot.observed_at, requested_node="node01",
+        hostname="node01", username="cluster_user", module_name=ClusterProfile().wannier_module,
+        module_loaded=True, wannier90_path="/opt/wannier90/3.1.0/bin/wannier90.x",
+        wannier90_version="3.1.0", vasp_ncl_path="/opt/vasp/bin/vasp_ncl",
     )
     monkeypatch.setattr(web_module, "collect_probe", lambda *args, **kwargs: snapshot)
     monkeypatch.setattr(web_module, "collect_wannier_probe", lambda *args, **kwargs: wannier)
-    response = client.get("/api/nodes/cu20/probe")
+    response = client.get("/api/nodes/node01/probe")
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["status"] == "observable"
@@ -205,7 +205,7 @@ def test_node_probe_failure_is_a_safe_status(
             ValueError("SSH_PROBE_FAILED: remote-secret-command")
         ),
     )
-    response = client.get("/api/nodes/cu20/probe")
+    response = client.get("/api/nodes/node01/probe")
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "connection_failed"
@@ -229,7 +229,7 @@ def test_tampered_inputs_cannot_be_accepted(
 
     review = client.post(
         f"/api/projects/{item_id}/review", headers=headers,
-        json={"reviewer": "zyy", "decision": "accept"},
+        json={"reviewer": "cluster_user", "decision": "accept"},
     )
     assert review.status_code == 422
     assert "HASH_MISMATCH" in review.json()["detail"]
@@ -252,7 +252,7 @@ def test_concurrent_review_records_one_decision(
     def decide(decision: str) -> int:
         response = client.post(
             f"/api/projects/{item_id}/review", headers=headers,
-            json={"reviewer": "zyy", "decision": decision,
+            json={"reviewer": "cluster_user", "decision": decision,
                   "notes": "adjust parameters" if decision == "revise" else None},
         )
         return response.status_code
@@ -360,12 +360,12 @@ def test_agent_approval_resume_uses_named_decisions(
     assert client.post(f"/api/agent/sessions/{item_id}/decisions", headers=headers,
                        json={"reviewer": "agent", "decisions": {"T1": True}}).status_code == 422
     assert client.post(f"/api/agent/sessions/{item_id}/decisions", headers=headers,
-                       json={"reviewer": "zyy", "decisions": {"T2": True}}).status_code == 422
+                       json={"reviewer": "cluster_user", "decisions": {"T2": True}}).status_code == 422
     approved = client.post(f"/api/agent/sessions/{item_id}/decisions", headers=headers,
-                           json={"reviewer": "zyy", "decisions": {"T1": True}})
+                           json={"reviewer": "cluster_user", "decisions": {"T1": True}})
     assert approved.status_code == 202, approved.text
     assert client.get(f"/api/agent/sessions/{item_id}").json()["status"] == "completed"
-    assert calls == [{"T1": {"approve": True, "approver": "zyy"}}]
+    assert calls == [{"T1": {"approve": True, "approver": "cluster_user"}}]
 
 
 def test_completed_agent_sessions_are_bounded(
@@ -411,17 +411,17 @@ def _create_resource_project(client, headers, **data):
 def test_project_resources_persist_without_changing_input_review(web_client, tmp_path):
     client, headers = web_client
     response = _create_resource_project(client, headers, resource_mode="manual",
-                                        resource_node="cu20", resource_mpi_ranks="8")
+                                        resource_node="node01", resource_mpi_ranks="8")
     assert response.status_code == 201, response.text
     detail = response.json()
     item_id = detail["id"]
     resources = detail["resources"]
-    assert (resources["mode"], resources["node"], resources["mpi_ranks"]) == ("manual", "cu20", 8)
+    assert (resources["mode"], resources["node"], resources["mpi_ranks"]) == ("manual", "node01", 8)
     assert resources["selection"] is None
     accepted = client.post(f"/api/projects/{item_id}/review", headers=headers,
-                           json={"reviewer": "zyy", "decision": "accept"}).json()
+                           json={"reviewer": "cluster_user", "decision": "accept"}).json()
     changed = client.put(f"/api/projects/{item_id}/resources", headers=headers,
-                         json={"mode": "manual", "node": "cu21", "mpi_ranks": 16})
+                         json={"mode": "manual", "node": "node02", "mpi_ranks": 16})
     assert changed.status_code == 200, changed.text
     assert changed.json()["resources"]["revision"] > resources["revision"]
     assert changed.json()["review_card"] == accepted["review_card"]
@@ -432,14 +432,14 @@ def test_project_resources_persist_without_changing_input_review(web_client, tmp
 
 
 @pytest.mark.parametrize("preferences", [
-    {"mode": "manual", "node": "mu01", "mpi_ranks": 8},
+    {"mode": "manual", "node": "login01", "mpi_ranks": 8},
     {"mode": "manual", "node": "cu99", "mpi_ranks": 8},
-    {"mode": "manual", "node": "cu20", "mpi_ranks": 0},
-    {"mode": "manual", "node": "cu20", "mpi_ranks": 1025},
-    {"mode": "manual", "node": "cu20", "mpi_ranks": 1.5},
-    {"mode": "manual", "node": "cu20", "mpi_ranks": True},
-    {"mode": "manual", "node": "cu20"},
-    {"mode": "llm", "node": "cu20", "mpi_ranks": 8},
+    {"mode": "manual", "node": "node01", "mpi_ranks": 0},
+    {"mode": "manual", "node": "node01", "mpi_ranks": 1025},
+    {"mode": "manual", "node": "node01", "mpi_ranks": 1.5},
+    {"mode": "manual", "node": "node01", "mpi_ranks": True},
+    {"mode": "manual", "node": "node01"},
+    {"mode": "llm", "node": "node01", "mpi_ranks": 8},
 ])
 def test_invalid_project_resource_preferences_are_rejected(web_client, preferences):
     client, headers = web_client
@@ -452,9 +452,9 @@ def test_invalid_project_resource_preferences_are_rejected(web_client, preferenc
 
 def test_invalid_resource_form_does_not_allocate_project(web_client, tmp_path):
     client, headers = web_client
-    for data in ({"resource_mode": "manual", "resource_node": "mu01", "resource_mpi_ranks": "4"},
+    for data in ({"resource_mode": "manual", "resource_node": "login01", "resource_mpi_ranks": "4"},
                  {"resource_mode": "manual"},
-                 {"resource_mode": "manual", "resource_node": "cu20", "resource_mpi_ranks": "1.5"}):
+                 {"resource_mode": "manual", "resource_node": "node01", "resource_mpi_ranks": "1.5"}):
         result = _create_resource_project(client, headers, **data)
         assert result.status_code == 422, result.text
     assert list((tmp_path / "web/projects").iterdir()) == []
@@ -463,7 +463,7 @@ def test_invalid_resource_form_does_not_allocate_project(web_client, tmp_path):
 def test_resource_selection_persists_and_project_agent_is_bound(web_client, tmp_path, monkeypatch):
     client, headers = web_client
     detail = _create_resource_project(client, headers, resource_mode="manual",
-                                     resource_node="cu20", resource_mpi_ranks="2").json()
+                                     resource_node="node01", resource_mpi_ranks="2").json()
     item_id = detail["id"]
     (tmp_path / "llm.json").write_text("{}")
     assert client.post("/api/agent/sessions", headers=headers,
@@ -471,7 +471,7 @@ def test_resource_selection_persists_and_project_agent_is_bound(web_client, tmp_
     selected_requests = []
 
     def choose(profile, preferences, context, llm_path):
-        assert preferences.node == "cu20" and preferences.mpi_ranks == 2
+        assert preferences.node == "node01" and preferences.mpi_ranks == 2
         assert context["executable"] == detail["review_card"]["steps"][0]["executable"]
         assert context["atom_count"] > 0
         request = ExecutionRequest(node=preferences.node, mpi_ranks=preferences.mpi_ranks,
@@ -485,7 +485,7 @@ def test_resource_selection_persists_and_project_agent_is_bound(web_client, tmp_
     assert selection.status_code == 200, selection.text
     selected = selection.json()["resources"]
     assert client.get(f"/api/projects/{item_id}").json()["resources"] == selected
-    assert selected["selection"]["node"] == "cu20"
+    assert selected["selection"]["node"] == "node01"
     bound_registries = []
 
     class FakeGraph:
@@ -493,7 +493,7 @@ def test_resource_selection_persists_and_project_agent_is_bound(web_client, tmp_
             bound_registries.append(registry)
 
         def run(self, goal):
-            assert "node=cu20; mpi_ranks=2" in goal
+            assert "node=node01; mpi_ranks=2" in goal
             return SimpleNamespace(pending_approvals=[], model_dump=lambda **_: {})
 
     monkeypatch.setattr("magnetic_vasp_agent.agent.graph.VaspAgentGraph", FakeGraph)
@@ -514,14 +514,14 @@ def test_resource_selection_persists_and_project_agent_is_bound(web_client, tmp_
                        json={"goal": "plan", "project_id": item_id}).status_code == 409
     preview = registry.get("execution.probe")
     with pytest.raises(ValueError, match="PROJECT_PROFILE_CHANGED"):
-        preview.run(preview.input_model(profile=str(profile_file), node="cu20"))
+        preview.run(preview.input_model(profile=str(profile_file), node="node01"))
     profile_file.write_bytes(original_profile)
     changed = client.put(f"/api/projects/{item_id}/resources", headers=headers,
-                         json={"mode": "manual", "node": "cu21", "mpi_ranks": 4})
+                         json={"mode": "manual", "node": "node02", "mpi_ranks": 4})
     assert changed.status_code == 200
     assert changed.json()["resources"]["selection"] is None
     with pytest.raises(ValueError, match="PROJECT_RESOURCES_CHANGED"):
-        preview.run(preview.input_model(profile=str(tmp_path / "cluster.json"), node="cu20"))
+        preview.run(preview.input_model(profile=str(tmp_path / "cluster.json"), node="node01"))
 
 
 def test_resource_selection_failure_is_explicit_and_does_not_save_choice(web_client, monkeypatch):
@@ -551,7 +551,7 @@ def test_profile_change_during_selection_discards_result_and_blocks_overlapping_
         assert client.put(resource_url, headers=headers, json={"mode": "llm"}).status_code == 409
         assert client.post(resource_url + "/select", headers=headers).status_code == 409
         (tmp_path / "cluster.json").write_text(profile.model_copy(update={"user": "changed"}).model_dump_json())
-        return {"node": "cu20", "mpi_ranks": 2}
+        return {"node": "node01", "mpi_ranks": 2}
 
     monkeypatch.setattr(web_module, "choose_project_resources", choose)
     response = client.post(resource_url + "/select", headers=headers)

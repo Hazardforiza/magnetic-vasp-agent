@@ -90,7 +90,7 @@ def test_project_catalog_and_evaluation_suite_are_typed():
     catalog = KnowledgeCatalog.model_validate_json(
         (ROOT / "config" / "knowledge" / "sources.json").read_bytes()
     )
-    assert len(catalog.sources) == 21
+    assert len(catalog.sources) == 20
     assert {source.id for source in catalog.sources} >= {
         "reference-demo-library",
         "agent-skill-library",
@@ -104,24 +104,11 @@ def test_project_catalog_and_evaluation_suite_are_typed():
         for source in catalog.sources
     )
     assert {source.authority for source in catalog.sources if source.source_type == "official"} == {100}
-    sanitized = next(
-        source
-        for source in catalog.sources
-        if source.id == "cluster-maintenance-sanitized-review"
-    )
-    assert sanitized.source_type == "personal_note"
-    assert sanitized.validated is False
-    assert all(
-        "server_maintenance.html" not in (source.path or "")
-        for source in catalog.sources
-    )
-    sanitized_text = (
-        ROOT / "docs" / "knowledge" / "cluster_manual_sanitized.md"
-    ).read_text(encoding="utf-8")
-    assert all(
-        fragment not in sanitized_text
-        for fragment in ("<pre", "root@", "wwsh", "192.168.1.")
-    )
+    assert "cluster-maintenance-sanitized-review" not in {source.id for source in catalog.sources}
+    member_setup = (ROOT / "docs" / "knowledge" / "member_setup.md").read_text(encoding="utf-8")
+    assert "execution_enabled" in member_setup
+    assert r"config\execution\identity.json" in member_setup
+    assert "SSH 提示" in member_setup
 
     suite = RagEvaluationSuite.model_validate_json(
         (ROOT / "tests" / "fixtures" / "knowledge" / "rag_evaluation_cases.json").read_bytes()

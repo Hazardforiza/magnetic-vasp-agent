@@ -29,7 +29,7 @@ from magnetic_vasp_agent.mcif_workflow import plan_workflow_from_mcif
 ROOT = Path(__file__).parents[1]
 
 
-def _snapshot(*, node: str = "cu21", source: str = "ssh_probe") -> ProbeSnapshot:
+def _snapshot(*, node: str = "node02", source: str = "ssh_probe") -> ProbeSnapshot:
     cpus = [
         Cpu(cpu=i, core=i % 20, socket=(i % 20) // 10, online=True)
         for i in range(40)
@@ -38,15 +38,15 @@ def _snapshot(*, node: str = "cu21", source: str = "ssh_probe") -> ProbeSnapshot
         source=source,
         observed_at=datetime.now(UTC),
         requested_node=node,
-        hostname=f"{node}.cmphc",
-        username="zyy",
+        hostname=f"{node}.example.org",
+        username="cluster_user",
         cpus=cpus,
         allowed_cpu_ids=list(range(40)),
         processes=[],
         load1=0.0,
         mem_available_kib=8 * 1024 * 1024,
         module_loaded=True,
-        mpi_path="/public/intel/oneapi/mpi/2021.1.1/bin/mpirun",
+        mpi_path="/opt/intel/oneapi/mpi/bin/mpirun",
         executables={"vasp_std": True, "vasp_ncl": True, "vasp_gam": True},
     )
 
@@ -87,16 +87,16 @@ def grant_context(tmp_path: Path):
     build_review_card(bundle, log_path=review_log)
     record_input_review(
         bundle,
-        reviewer="zyy",
+        reviewer="cluster_user",
         decision="accept",
         log_path=review_log,
     )
     step_id = json_step_ids(bundle)[0]
     profile = ClusterProfile(
-        execution_enabled=True, remote_root="/home/zyy/magvasp/runs"
+        execution_enabled=True, remote_root="/home/cluster_user/magvasp/runs"
     )
     request = ExecutionRequest(
-        node="cu21", step_id=step_id, run_id="grant-run", mpi_ranks=2
+        node="node02", step_id=step_id, run_id="grant-run", mpi_ranks=2
     )
     snapshot = _snapshot()
     return bundle, profile, request, snapshot
@@ -117,17 +117,17 @@ def test_resource_grant_revalidates_and_binds_all_artifacts(grant_context, tmp_p
         profile,
         request,
         snapshot,
-        approver="zyy",
+        approver="cluster_user",
         confirm=RESOURCE_GRANT_CONFIRM,
         now=approved_at,
         valid_for=timedelta(minutes=15),
     )
 
     assert grant.workflow_id == "grant-demo"
-    assert grant.node == "cu21"
+    assert grant.node == "node02"
     assert grant.mpi_ranks == 2
     assert grant.cpu_ids == [0, 1]
-    assert grant.approver == "zyy"
+    assert grant.approver == "cluster_user"
     assert set(grant.input_sha256) == {"POSCAR", "POTCAR", "INCAR", "KPOINTS"}
     assert grant.run_sha256 == digest(
         __import__("magnetic_vasp_agent.workflow", fromlist=["json_bytes"]).json_bytes(
@@ -143,7 +143,7 @@ def test_resource_grant_revalidates_and_binds_all_artifacts(grant_context, tmp_p
         request,
         snapshot,
         output,
-        approver="zyy",
+        approver="cluster_user",
         confirm=RESOURCE_GRANT_CONFIRM,
         now=approved_at,
     )
@@ -155,7 +155,7 @@ def test_resource_grant_revalidates_and_binds_all_artifacts(grant_context, tmp_p
             request,
             snapshot,
             output,
-            approver="zyy",
+            approver="cluster_user",
             confirm=RESOURCE_GRANT_CONFIRM,
             now=approved_at,
         )
@@ -169,7 +169,7 @@ def test_resource_grant_requires_exact_confirmation_and_human_review(grant_conte
             profile,
             request,
             snapshot,
-            approver="zyy",
+            approver="cluster_user",
             confirm="yes",
             now=snapshot.observed_at,
         )
@@ -196,7 +196,7 @@ def test_resource_grant_rejects_stale_or_offline_snapshot(grant_context):
             profile,
             request,
             stale,
-            approver="zyy",
+            approver="cluster_user",
             confirm=RESOURCE_GRANT_CONFIRM,
             now=snapshot.observed_at,
         )
@@ -207,7 +207,7 @@ def test_resource_grant_rejects_stale_or_offline_snapshot(grant_context):
             profile,
             request,
             offline,
-            approver="zyy",
+            approver="cluster_user",
             confirm=RESOURCE_GRANT_CONFIRM,
             now=snapshot.observed_at,
         )
@@ -236,7 +236,7 @@ def test_resource_grant_cli_writes_json(grant_context, tmp_path):
             "--snapshot",
             str(snapshot_path),
             "--approver",
-            "zyy",
+            "cluster_user",
             "--confirm",
             RESOURCE_GRANT_CONFIRM,
             "--output",
@@ -245,4 +245,4 @@ def test_resource_grant_cli_writes_json(grant_context, tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert output.is_file()
-    assert '"approver": "zyy"' in output.read_text(encoding="utf-8")
+    assert '"approver": "cluster_user"' in output.read_text(encoding="utf-8")

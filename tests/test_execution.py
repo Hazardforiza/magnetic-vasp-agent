@@ -44,7 +44,7 @@ from magnetic_vasp_agent.workflow_models import Workflow
 ROOT = Path(__file__).parents[1]
 
 
-def topology_snapshot(*, busy: bool, node: str = "cu21") -> ProbeSnapshot:
+def topology_snapshot(*, busy: bool, node: str = "node02") -> ProbeSnapshot:
     cpus = [Cpu(cpu=i, core=i % 20, socket=(i % 20) // 10, online=True) for i in range(40)]
     processes = []
     if busy:
@@ -54,23 +54,26 @@ def topology_snapshot(*, busy: bool, node: str = "cu21") -> ProbeSnapshot:
         ]
     return ProbeSnapshot(
         source="offline_fixture", observed_at=datetime.now(UTC),
-        requested_node=node, hostname=f"{node}.cmphc", username="zyy", cpus=cpus,
+        requested_node=node, hostname=f"{node}.example.org", username="cluster_user", cpus=cpus,
         allowed_cpu_ids=list(range(40)), processes=processes,
         load1=20.0 if busy else 0.0, mem_available_kib=8 * 1024 * 1024,
         module_loaded=True,
-        mpi_path="/public/intel/oneapi/mpi/2021.1.1/bin/mpirun",
+        mpi_path="/opt/intel/oneapi/mpi/bin/mpirun",
         executables={"vasp_std": True, "vasp_ncl": True, "vasp_gam": True},
     )
 
 
 def test_node_policy_is_exact():
-    assert set(ALLOWED_NODES) == {"cu20", "cu21", "cu22", "cu23", "cu38", "cu39", "cu40", "cu41", "cu43", "cu48", "cu49", "cu50"}
+    assert set(ALLOWED_NODES) == {
+        "node01", "node02", "node03", "node04", "node05", "node06",
+        "node07", "node08", "node09", "node10", "node11", "node12",
+    }
     with pytest.raises(ValueError):
-        probe_preview(ClusterProfile(), "mu01")
+        probe_preview(ClusterProfile(), "login01")
 
 
-def test_busy_cu21_cannot_be_declared_safe():
-    request = ExecutionRequest(node="cu21", step_id="step", run_id="run", mpi_ranks=1)
+def test_busy_node02_cannot_be_declared_safe():
+    request = ExecutionRequest(node="node02", step_id="step", run_id="run", mpi_ranks=1)
     assessment = assess_resources(topology_snapshot(busy=True), request)
     codes = {item.code for item in assessment.blockers}
     assert "NODE_BUSY" in codes
@@ -83,13 +86,13 @@ def test_busy_cu21_cannot_be_declared_safe():
 
 def test_smt_siblings_are_not_two_physical_cores():
     snapshot = topology_snapshot(busy=False)
-    request = ExecutionRequest(node="cu21", step_id="step", run_id="run", mpi_ranks=2, cpu_ids=[0, 20])
+    request = ExecutionRequest(node="node02", step_id="step", run_id="run", mpi_ranks=2, cpu_ids=[0, 20])
     codes = {item.code for item in assess_resources(snapshot, request).blockers}
     assert "SMT_SIBLING_CONFLICT" in codes
 
 
 def test_probe_preview_is_non_executing():
-    preview = probe_preview(ClusterProfile(), "cu21")
+    preview = probe_preview(ClusterProfile(), "node02")
     assert preview["mode"] == "readonly_probe_preview"
     assert preview["executes_mpi"] is False
     assert preview["writes_remote_files"] is False
@@ -97,19 +100,19 @@ def test_probe_preview_is_non_executing():
     assert preview["stdin_used"] is False
     assert "vasp_std" in preview["stdin_script"]
     assert "BatchMode=yes" in preview["ssh_argv"]
-    host = next(part for part in preview["ssh_argv"] if part.startswith("zyy@"))
+    host = next(part for part in preview["ssh_argv"] if part.startswith("cluster_user@"))
     outer = preview["ssh_argv"][: preview["ssh_argv"].index(host)]
-    assert outer[outer.index("-p") + 1] == "7722"
+    assert outer[outer.index("-p") + 1] == "22"
     assert "-p 22" in preview["ssh_argv"][-1]
 
 
 def test_interactive_probe_asks_password_and_does_not_pipe_stdin():
-    preview = probe_preview(ClusterProfile(), "cu22", interactive=True)
+    preview = probe_preview(ClusterProfile(), "node03", interactive=True)
     assert preview["auth_mode"] == "interactive_password"
     assert preview["stdin_used"] is False
     assert preview["stores_password"] is False
     argv = preview["ssh_argv"]
-    host = next(part for part in argv if part.startswith("zyy@"))
+    host = next(part for part in argv if part.startswith("cluster_user@"))
     outer = argv[: argv.index(host)]
     assert "PreferredAuthentications=password,keyboard-interactive" in outer
     assert "PubkeyAuthentication=no" in outer
@@ -120,7 +123,7 @@ def test_interactive_probe_asks_password_and_does_not_pipe_stdin():
 
 def test_probe_parser_rejects_extra_sections():
     with pytest.raises(ValueError):
-        parse_probe("MAGVASP_PROBE_V1\n@@identity\ncu21\nzyy\n@@end\n", "cu21")
+        parse_probe("MAGVASP_PROBE_V1\n@@identity\nnode02\ncluster_user\n@@end\n", "node02")
 
 
 @pytest.mark.parametrize("scenario,expected", [("complete", "completed_unverified"), ("fail", "failed"), ("timeout", "timed_out"), ("cancel", "cancelled")])
@@ -162,7 +165,7 @@ def test_execution_plan_is_blocked_without_remote_side_effects(packages, monkeyp
         pytest.fail("offline plan must not spawn processes")
     monkeypatch.setattr(subprocess, "Popen", forbidden)
     bundle = packages["FeO.generated.mcif"]
-    request = ExecutionRequest(node="cu21", step_id="candidate-01", run_id="review", mpi_ranks=1)
+    request = ExecutionRequest(node="node02", step_id="candidate-01", run_id="review", mpi_ranks=1)
     report = prepare_execution(bundle, ClusterProfile(), request)
     codes = {item["code"] for item in report["blockers"]}
     assert report["ready_to_run"] is False
@@ -172,7 +175,7 @@ def test_execution_plan_is_blocked_without_remote_side_effects(packages, monkeyp
     assert "SYNTHETIC ONLY" not in json.dumps(report)
 
 
-@pytest.mark.parametrize("node", ["cu21; id", "cu21\n", "-oProxyCommand=id"])
+@pytest.mark.parametrize("node", ["node02; id", "node02\n", "-oProxyCommand=id"])
 def test_unknown_nodes_never_reach_subprocess(node, monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("invalid node reached SSH"))
     with pytest.raises(ValueError):
@@ -183,7 +186,7 @@ def test_unknown_nodes_never_reach_subprocess(node, monkeypatch):
 
 def test_gateway_port_is_configurable():
     profile = ClusterProfile()
-    assert profile.port == 7722
+    assert profile.port == 22
     assert profile.node_port == 22
     assert ClusterProfile(port=2200, node_port=2222).port == 2200
 
@@ -200,11 +203,11 @@ def test_execution_enabled_requires_remote_root():
 
 
 def test_execution_enabled_accepts_dedicated_root():
-    profile = ClusterProfile(execution_enabled=True, remote_root="/home/zyy/magvasp/runs")
+    profile = ClusterProfile(execution_enabled=True, remote_root="/home/cluster_user/magvasp/runs")
     assert profile.execution_enabled is True
 
 
-@pytest.mark.parametrize("value", ["/", "/home/zyy", "~/runs", "/home/zyy/run/../old", "/home/zyy/run/a;id", "/home/zyy/run/a\n", "/home//zyy/runs", "/home/zyy/run/", "C:/runs"])
+@pytest.mark.parametrize("value", ["/", "/home/cluster_user", "~/runs", "/home/cluster_user/run/../old", "/home/cluster_user/run/a;id", "/home/cluster_user/run/a\n", "/home//cluster_user/runs", "/home/cluster_user/run/", "C:/runs"])
 def test_remote_root_rejects_broad_and_unsafe_paths(value):
     with pytest.raises(ValueError):
         ClusterProfile(remote_root=value)
@@ -213,7 +216,7 @@ def test_remote_root_rejects_broad_and_unsafe_paths(value):
 @pytest.mark.parametrize("kwargs", [{"mpi_ranks": 0}, {"mpi_ranks": True}, {"mpi_ranks": "2"}, {"mpi_ranks": 2, "cpu_ids": [0]}, {"mpi_ranks": 2, "cpu_ids": [0, 0]}, {"cpu_ids": [-1]}, {"run_id": "../old"}, {"step_id": "CON"}, {"command": "id"}])
 def test_execution_request_strict(kwargs):
     with pytest.raises(ValueError):
-        ExecutionRequest(**{"node": "cu21", "step_id": "scf", "run_id": "run", **kwargs})
+        ExecutionRequest(**{"node": "node02", "step_id": "scf", "run_id": "run", **kwargs})
 
 
 @pytest.mark.parametrize("offset", [-61, 10])
@@ -221,13 +224,13 @@ def test_stale_or_future_snapshot_blocks(offset):
     snapshot = topology_snapshot(busy=False)
     now = snapshot.observed_at
     snapshot = snapshot.model_copy(update={"observed_at": now + timedelta(seconds=offset)})
-    assessment = assess_resources(snapshot, ExecutionRequest(node="cu21", step_id="scf", run_id="run"), now=now)
+    assessment = assess_resources(snapshot, ExecutionRequest(node="node02", step_id="scf", run_id="run"), now=now)
     assert "SNAPSHOT_STALE" in {b.code for b in assessment.blockers}
 
 
 def test_idle_node_does_not_establish_allocation():
     snapshot = topology_snapshot(busy=False).model_copy(update={"source": "ssh_probe"})
-    assessment = assess_resources(snapshot, ExecutionRequest(node="cu21", step_id="scf", run_id="run", mpi_ranks=20))
+    assessment = assess_resources(snapshot, ExecutionRequest(node="node02", step_id="scf", run_id="run", mpi_ranks=20))
     assert assessment.suggested_cpu_ids == list(range(20))
     assert not assessment.ready_to_run and not assessment.allocation_verified
     assert "ALLOCATION_UNCONFIRMED" in {b.code for b in assessment.blockers}
@@ -235,14 +238,14 @@ def test_idle_node_does_not_establish_allocation():
 
 def test_affinity_and_ranks_limits():
     snapshot = topology_snapshot(busy=False).model_copy(update={"allowed_cpu_ids": [0, 20]})
-    report = assess_resources(snapshot, ExecutionRequest(node="cu21", step_id="scf", run_id="run", mpi_ranks=2, cpu_ids=[0, 1]))
+    report = assess_resources(snapshot, ExecutionRequest(node="node02", step_id="scf", run_id="run", mpi_ranks=2, cpu_ids=[0, 1]))
     assert report.accessible_physical_cores == 1
     assert {"CPU_NOT_ACCESSIBLE", "INSUFFICIENT_PHYSICAL_CORES"} <= {b.code for b in report.blockers}
 
 
 def test_wrong_host_and_runtime_block():
-    snapshot = topology_snapshot(busy=False).model_copy(update={"hostname": "mu01", "mpi_path": "/unexpected/mpirun", "mem_available_kib": 0})
-    report = assess_resources(snapshot, ExecutionRequest(node="cu21", step_id="scf", run_id="run"))
+    snapshot = topology_snapshot(busy=False).model_copy(update={"hostname": "login01", "mpi_path": "/unexpected/mpirun", "mem_available_kib": 0})
+    report = assess_resources(snapshot, ExecutionRequest(node="node02", step_id="scf", run_id="run"))
     assert {"IDENTITY_MISMATCH", "RUNTIME_MISMATCH", "LOW_MEMORY"} <= {b.code for b in report.blockers}
 
 
@@ -250,18 +253,18 @@ def probe_text():
     snapshot = topology_snapshot(busy=True)
     topology = {"cpus": [{"cpu": str(c.cpu), "core": str(c.core), "socket": str(c.socket), "online": "yes"} for c in snapshot.cpus]}
     return "\n".join([
-        "SSH banner", "MAGVASP_PROBE_V1", "@@identity", "cu21.cmphc", "zyy",
+        "SSH banner", "MAGVASP_PROBE_V1", "@@identity", "node02.example.org", "cluster_user",
         "@@time", "2026-09-05T12:00:00Z", "@@cpus", json.dumps(topology),
         "@@affinity", "0-39", "@@processes",
         *[f"{p.pid} {p.user} {p.last_cpu} {p.cpu_percent} {p.command}" for p in snapshot.processes],
         "@@load", "20.0 20.1 19.9 20/200 1234", "@@memory", "8388608",
-        "@@runtime", "module_loaded=yes", "mpi_path=/public/intel/oneapi/mpi/2021.1.1/bin/mpirun",
+        "@@runtime", "module_loaded=yes", "mpi_path=/opt/intel/oneapi/mpi/bin/mpirun",
         "vasp_std=yes", "vasp_ncl=yes", "vasp_gam=yes", "@@end", "",
     ])
 
 
 def test_probe_parse_complete_protocol():
-    snapshot = parse_probe(probe_text(), "cu21")
+    snapshot = parse_probe(probe_text(), "node02")
     assert len(snapshot.cpus) == 40
     assert len(snapshot.processes) == 20
     assert snapshot.module_loaded
@@ -275,7 +278,7 @@ def test_probe_parse_complete_protocol():
 ])
 def test_bad_probe_protocol(before, after):
     with pytest.raises(ValueError):
-        parse_probe(probe_text().replace(before, after), "cu21")
+        parse_probe(probe_text().replace(before, after), "node02")
 
 
 def test_collect_only_runs_fixed_probe(monkeypatch):
@@ -286,9 +289,9 @@ def test_collect_only_runs_fixed_probe(monkeypatch):
         return SimpleNamespace(returncode=0, stdout=probe_text().encode(), stderr=b"")
     monkeypatch.setattr(subprocess, "run", run)
     before = datetime.now(UTC)
-    snapshot = collect_probe(ClusterProfile(), "cu21")
+    snapshot = collect_probe(ClusterProfile(), "node02")
     after = datetime.now(UTC)
-    assert snapshot.hostname == "cu21.cmphc"
+    assert snapshot.hostname == "node02.example.org"
     assert before <= snapshot.observed_at <= after
     assert snapshot.observed_at != datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
     assert captured["argv"][0] == "trusted-ssh"
@@ -313,24 +316,24 @@ def test_probe_failures_are_explicit_and_do_not_echo_remote_data(monkeypatch, fa
                                stderr=b"UNTRUSTED_REMOTE_TEXT")
     monkeypatch.setattr(subprocess, "run", run)
     with pytest.raises(ValueError) as exc:
-        collect_probe(ClusterProfile(), "cu21")
+        collect_probe(ClusterProfile(), "node02")
     assert "UNTRUSTED_REMOTE_TEXT" not in str(exc.value)
 
 
 def test_guarded_preview_has_physical_binding(packages):
-    profile = ClusterProfile(remote_root="/home/zyy/magvasp/runs")
-    request = ExecutionRequest(node="cu21", step_id="candidate-01", run_id="review", mpi_ranks=2)
+    profile = ClusterProfile(remote_root="/home/cluster_user/magvasp/runs")
+    request = ExecutionRequest(node="node02", step_id="candidate-01", run_id="review", mpi_ranks=2)
     report = prepare_execution(packages["FeO.generated.mcif"], profile, request, topology_snapshot(busy=True))
     assert report["guarded_script_preview"].splitlines()[2] == "exit 78"
     assert report["environment_candidate"]["I_MPI_PIN_PROCESSOR_LIST"] == "0,1"
-    assert report["mpi_argv_candidate"][1:5] == ["-bootstrap", "fork", "-hosts", "cu21"]
+    assert report["mpi_argv_candidate"][1:5] == ["-bootstrap", "fork", "-hosts", "node02"]
     assert "NODE_BUSY" in {b["code"] for b in report["blockers"]}
 
 
 def test_waiting_band_cannot_be_released_by_local_charge(packages):
     bundle = packages["Mn3Al.scf-dos-band"]
     (bundle / "band" / "CHGCAR").write_text("not a converged charge density")
-    report = prepare_execution(bundle, ClusterProfile(), ExecutionRequest(node="cu21", step_id="band", run_id="review"))
+    report = prepare_execution(bundle, ClusterProfile(), ExecutionRequest(node="node02", step_id="band", run_id="review"))
     assert "UPSTREAM_NOT_VERIFIED" in {b["code"] for b in report["blockers"]}
     assert report["executable"] == "vasp_std"
 
@@ -341,7 +344,7 @@ def test_plan_rejects_tampering(packages, filename):
     with (bundle / "candidate-01" / filename).open("ab") as handle:
         handle.write(b"tampered")
     with pytest.raises(ValueError, match="HASH_MISMATCH"):
-        prepare_execution(bundle, ClusterProfile(), ExecutionRequest(node="cu21", step_id="candidate-01", run_id="review"))
+        prepare_execution(bundle, ClusterProfile(), ExecutionRequest(node="node02", step_id="candidate-01", run_id="review"))
 
 
 def test_manifest_contract_checked_even_with_updated_hashes(packages):
@@ -355,7 +358,7 @@ def test_manifest_contract_checked_even_with_updated_hashes(packages):
     top["steps"]["candidate-01"]["manifest_sha256"] = digest(json_bytes(step))
     path.write_bytes(json_bytes(top))
     with pytest.raises(ValueError, match="MANIFEST_CONTRACT"):
-        prepare_execution(bundle, ClusterProfile(), ExecutionRequest(node="cu21", step_id="candidate-01", run_id="review"))
+        prepare_execution(bundle, ClusterProfile(), ExecutionRequest(node="node02", step_id="candidate-01", run_id="review"))
 
 
 def test_reports_and_simulations_refuse_overwrite(tmp_path):
@@ -389,12 +392,12 @@ def test_local_cancel_only_affects_owned_process(tmp_path):
 def test_cli_previews_never_connect_and_have_no_launch_option(packages, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("preview tried a subprocess"))
     runner = CliRunner()
-    profile = str(ROOT / "config/execution/cluster.json")
-    result = runner.invoke(app, ["execution", "probe", "--profile", profile, "--node", "cu21"])
+    profile = str(ROOT / "config/execution/cluster.example.json")
+    result = runner.invoke(app, ["execution", "probe", "--profile", profile, "--node", "node02"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["mode"] == "readonly_probe_preview"
     result = runner.invoke(app, ["execution", "plan", "--profile", profile,
-        "--request", str(ROOT / "config/execution/FeO.cu21.preview.json"),
+        "--request", str(ROOT / "config/execution/FeO.example.preview.json"),
         "--bundle", str(packages["FeO.generated.mcif"])])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["ready_to_run"] is False
@@ -403,8 +406,8 @@ def test_cli_previews_never_connect_and_have_no_launch_option(packages, monkeypa
 
 
 def test_transfer_plan_is_scoped_and_non_overwriting(packages):
-    profile = ClusterProfile(remote_root="/home/zyy/magvasp/runs")
-    request = TransferRequest(node="cu21", run_id="review")
+    profile = ClusterProfile(remote_root="/home/cluster_user/magvasp/runs")
+    request = TransferRequest(node="node02", run_id="review")
     report = build_transfer_plan(packages["FeO.generated.mcif"], profile, request)
     assert report["ready_to_transfer"] is True
     assert report["transferred"] is False
@@ -423,7 +426,7 @@ def test_transfer_plan_rejects_unapproved_files(packages):
     bundle = packages["FeO.generated.mcif"]
     (bundle / "candidate-01" / "OUTCAR").write_text("not uploaded")
     with pytest.raises(ValueError, match="TRANSFER_SCOPE"):
-        build_transfer_plan(bundle, ClusterProfile(remote_root="/home/zyy/magvasp/runs"), TransferRequest(node="cu21", run_id="review"))
+        build_transfer_plan(bundle, ClusterProfile(remote_root="/home/cluster_user/magvasp/runs"), TransferRequest(node="node02", run_id="review"))
 
 
 def test_transfer_plan_rejects_bundle_and_manifest_symlinks(packages, tmp_path):
@@ -434,23 +437,23 @@ def test_transfer_plan_rejects_bundle_and_manifest_symlinks(packages, tmp_path):
     except (OSError, NotImplementedError):
         pytest.skip("symlinks unavailable")
     with pytest.raises(ValueError, match="TRANSFER_SCOPE"):
-        build_transfer_plan(link, ClusterProfile(remote_root="/home/zyy/magvasp/runs"), TransferRequest(node="cu21", run_id="review"))
+        build_transfer_plan(link, ClusterProfile(remote_root="/home/cluster_user/magvasp/runs"), TransferRequest(node="node02", run_id="review"))
     manifest_link = bundle / "workflow.manifest.json.link"
     manifest_link.symlink_to(bundle / "workflow.manifest.json")
     with pytest.raises(ValueError, match="TRANSFER_SCOPE"):
-        build_transfer_plan(bundle, ClusterProfile(remote_root="/home/zyy/magvasp/runs"), TransferRequest(node="cu21", run_id="review"))
+        build_transfer_plan(bundle, ClusterProfile(remote_root="/home/cluster_user/magvasp/runs"), TransferRequest(node="node02", run_id="review"))
 
 
 def test_transfer_plan_rejects_unsafe_request_and_root():
     with pytest.raises(ValueError):
-        TransferRequest(node="cu21", run_id="../review")
+        TransferRequest(node="node02", run_id="../review")
     with pytest.raises(ValueError):
-        ClusterProfile(remote_root="/home/zyy/magvasp/runs/../old")
+        ClusterProfile(remote_root="/home/cluster_user/magvasp/runs/../old")
 
 
 def test_transfer_upload_verifies_hashes_and_never_runs_vasp(packages, monkeypatch):
-    profile = ClusterProfile(remote_root="/home/zyy/magvasp/runs")
-    request = TransferRequest(node="cu21", run_id="verified")
+    profile = ClusterProfile(remote_root="/home/cluster_user/magvasp/runs")
+    request = TransferRequest(node="node02", run_id="verified")
     plan = build_transfer_plan(packages["FeO.generated.mcif"], profile, request)
     calls = []
 
@@ -478,8 +481,8 @@ def test_transfer_upload_verifies_hashes_and_never_runs_vasp(packages, monkeypat
 
 
 def test_transfer_stops_after_directory_guard_failure(packages, monkeypatch):
-    profile = ClusterProfile(remote_root="/home/zyy/magvasp/runs")
-    request = TransferRequest(node="cu21", run_id="guard-fails")
+    profile = ClusterProfile(remote_root="/home/cluster_user/magvasp/runs")
+    request = TransferRequest(node="node02", run_id="guard-fails")
     monkeypatch.setattr("magnetic_vasp_agent.transfer.shutil.which", lambda name: name)
     calls = []
 

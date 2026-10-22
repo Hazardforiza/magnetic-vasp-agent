@@ -77,14 +77,14 @@ def test_review_card_and_human_learning_log(potential_context, tmp_path, monkeyp
     with pytest.raises(ValueError, match="notes"):
         record_input_review(
             bundle,
-            reviewer="zyy",
+            reviewer="cluster_user",
             decision="reject",
             log_path=log,
         )
 
     reviewed = record_input_review(
         bundle,
-        reviewer="zyy",
+        reviewer="cluster_user",
         decision="revise",
         notes="ENCUT 600 is only a starting guess for FeO; check U before production.",
         lesson="For FeO static SCF, ask the user about DFT+U before treating ENCUT=600 as final.",
@@ -97,19 +97,19 @@ def test_review_card_and_human_learning_log(potential_context, tmp_path, monkeyp
     assert len(history) == 1
     assert "DFT+U" in (history[0].lesson or "")
     assert load_review_history(log, species=["Mn", "Al"]) == []
-    assert load_review_history(log, reviewer="zyy")
+    assert load_review_history(log, reviewer="cluster_user")
     assert load_review_history(log, reviewer="alice") == []
-    usage = tmp_path / "usage" / "zyy.md"
+    usage = tmp_path / "usage" / "cluster_user.md"
     assert usage.is_file()
     usage_text = usage.read_text(encoding="utf-8")
-    assert "Usage records for zyy" in usage_text
+    assert "Usage records for cluster_user" in usage_text
     assert "DFT+U" in usage_text
     assert "password=" not in usage_text
 
     with pytest.raises(ValueError, match="secret"):
         record_input_review(
             bundle,
-            reviewer="zyy",
+            reviewer="cluster_user",
             decision="accept",
             notes="password=not-a-real-secret",
             log_path=log,

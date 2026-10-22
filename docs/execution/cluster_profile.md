@@ -1,8 +1,8 @@
 # 集群配置契约
 
-执行代码不绑定某个实验室、账号或节点。运行时仍读取合成后的 `ClusterProfile`。本组部署把它拆成两层：
+执行代码不绑定某个实验室、账号或节点。运行时读取合成后的 `ClusterProfile`。示例部署把它拆成两层：
 
-- **站点模板** [`site.team.json`](../../config/execution/site.team.json)：节点白名单、`mu01`、VASP/MPI 路径、工位直连与本机隧道两种连法、`/home/{user}/magvasp/runs` 目录模板。组员可以共享这一份。
+- **站点模板** [`site.team.json`](../../config/execution/site.team.json)：示例节点白名单、网关、VASP/MPI 路径、连接方式和 `/home/{user}/magvasp/runs` 目录模板。真实值必须由管理员提供。
 - **个人身份** [`identity.example.json`](../../config/execution/identity.example.json)：集群用户名、选用 `office` 还是 `tunnel`、是否打开执行。复制为 gitignore 的 `identity.json`，不要提交。
 
 ```powershell
@@ -28,12 +28,12 @@ uv run --frozen magvasp execution compose `
 
 ## 本机隧道与工位直连
 
-本组站点预置两种 connection：
+示例站点预置两种 connection：
 
-- `office`：`192.168.164.203:7722`，工位电脑直连网关。
-- `tunnel`：`127.0.0.1:17722`，这台电脑上的 SSH 隧道入口。profile 不记录 ZeroTier 地址或密码。
+- `office`：`gateway.example.org:22`，示例办公网络入口。
+- `tunnel`：`127.0.0.1:2222`，示例本机 SSH 隧道入口。profile 不记录 overlay 地址或密码。
 
-即使连接端点是本机回环地址，登录后仍必须验证远端短主机名为站点里的 `gateway_hostname`（本组为 `mu01`）和当前 identity 中的用户。跳板主机永远不能作为计算节点或 VASP/MPI 提交目标。
+即使连接端点是本机回环地址，登录后仍必须验证远端短主机名与站点里的 `gateway_hostname` 和当前 identity 用户一致。网关永远不能作为计算节点或 VASP/MPI 提交目标。
 
 需要非默认本机端口时，可在 identity 里覆盖 `port`，不要改全组站点文件。
 
@@ -45,4 +45,4 @@ uv run --frozen magvasp execution compose `
 uv run --frozen magvasp execution login --profile config\execution\cluster.json --connect --interactive
 ```
 
-成功只证明隧道或工位网、账号和跳板身份匹配；密码不会被 Agent 读取或保存。后续无人值守 probe/传输需要公钥认证：用户在集群账号和允许的计算节点上按组内流程安装公钥，或在本机 SSH agent 中加载私钥。Agent 只使用操作系统已经提供的密钥/agent，不接收密码参数，也不启用 agent forwarding 到 `mu01`。
+成功只证明连接方式、账号和网关身份匹配；密码不会被 Agent 读取或保存。后续无人值守 probe/传输需要公钥认证：按站点管理员流程配置公钥，或在本机 SSH agent 中加载私钥。Agent 只使用操作系统已经提供的密钥/agent，不接收密码参数，也不启用 agent forwarding 到网关。

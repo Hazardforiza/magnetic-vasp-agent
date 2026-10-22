@@ -1,51 +1,54 @@
 {
   "schema_version": 1,
-  "site_id": "team-mu01",
+  "site_id": "team-example",
   "transport": "ssh_direct_mpi",
-  "gateway_hostname": "mu01",
+  "gateway_hostname": "login01",
   "node_port": 22,
   "allowed_nodes": [
-    "cu20",
-    "cu21",
-    "cu22",
-    "cu23",
-    "cu38",
-    "cu39",
-    "cu40",
-    "cu41",
-    "cu43",
-    "cu48",
-    "cu49",
-    "cu50"
+    "node01",
+    "node02",
+    "node03",
+    "node04",
+    "node05",
+    "node06",
+    "node07",
+    "node08",
+    "node09",
+    "node10",
+    "node11",
+    "node12"
   ],
-  "vasp_module": "vasp/5.4.4-intel",
-  "wannier_module": "vasp/5.4.4-intel-wannier90",
-  "mpi_path": "/public/intel/oneapi/mpi/2021.1.1/bin/mpirun",
+  "vasp_module": "vasp/6.4.2-intel",
+  "wannier_module": "vasp/6.4.2-intel-wannier90",
+  "lmod_path": "/opt/lmod/lmod/libexec/lmod",
+  "modulepath": "/opt/modules",
+  "mpi_path": "/opt/intel/oneapi/mpi/bin/mpirun",
   "vasp_paths": {
-    "vasp_std": "/public/vasp/vasp.5.4.4/bin/vasp_std",
-    "vasp_ncl": "/public/vasp/vasp.5.4.4/bin/vasp_ncl",
-    "vasp_gam": "/public/vasp/vasp.5.4.4/bin/vasp_gam"
+    "vasp_std": "/opt/vasp/bin/vasp_std",
+    "vasp_ncl": "/opt/vasp/bin/vasp_ncl",
+    "vasp_gam": "/opt/vasp/bin/vasp_gam"
   },
   "connections": [
     {
       "id": "office",
-      "gateway": "192.168.164.203",
-      "port": 7722,
-      "notes": "Workstation LAN to the mu01 SSH gateway. No password is stored here."
+      "gateway": "gateway.example.org",
+      "port": 22,
+      "notes": "Illustrative office-network endpoint. Replace privately before use; no password is stored here."
     },
     {
       "id": "tunnel",
       "gateway": "127.0.0.1",
-      "port": 17722,
-      "notes": "Local SSH tunnel on this computer. The workstation owns the forward; do not record ZeroTier addresses or passwords."
+      "port": 2222,
+      "notes": "Illustrative local SSH tunnel. Replace privately before use; do not record overlay addresses or passwords."
     }
   ],
   "remote_root_template": "/home/{user}/magvasp/runs",
   "notes": [
-    "mu01 is jump-only and must never run VASP or MPI.",
-    "There is no Slurm; jobs are single-node Intel MPI on one whitelisted cu node.",
-    "Use topsst.sh as a user-operated read-only occupancy reference; its output is advisory and never proves allocation.",
+    "login01 is jump-only and must never run VASP or MPI.",
+    "There is no scheduler assumption; jobs are single-node Intel MPI on an explicitly approved example node.",
+    "Use a site-provided read-only occupancy reference as advisory evidence; it never proves allocation.",
     "Probe the selected node immediately before launch; never signal other users.",
-    "Each member supplies their own cluster username and connection in a private identity file."
+    "Each member supplies their own cluster username and connection in a private identity file.",
+    "Replace every example endpoint and path before enabling execution."
   ]
 }

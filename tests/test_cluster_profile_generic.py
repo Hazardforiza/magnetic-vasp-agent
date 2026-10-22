@@ -5,12 +5,12 @@ from magnetic_vasp_agent.execution_probe import probe_preview
 def test_profile_accepts_another_cluster_without_changing_code() -> None:
     profile = ClusterProfile(
         gateway="login.example.org",
-        gateway_hostname="login01",
+        gateway_hostname="site-gateway",
         user="alice",
         port=2200,
         allowed_nodes=("gpu01", "gpu02"),
         vasp_module="vasp/6.4.2",
-        mpi_path="/opt/intel/mpi/bin/mpirun",
+        mpi_path="/opt/intel/oneapi/mpi/bin/mpirun",
         vasp_paths={
             "vasp_std": "/opt/vasp/bin/vasp_std",
             "vasp_ncl": "/opt/vasp/bin/vasp_ncl",
@@ -20,8 +20,8 @@ def test_profile_accepts_another_cluster_without_changing_code() -> None:
     request = ExecutionRequest(node="gpu01", step_id="scf", run_id="r1")
     preview = probe_preview(profile, request.node)
     assert "alice@login.example.org" in preview["ssh_argv"]
-    assert "login01" in preview["ssh_argv"][-1]
-    assert "mu01" not in preview["ssh_argv"][-1]
+    assert "site-gateway" in preview["ssh_argv"][-1]
+    assert "login01" not in preview["ssh_argv"][-1]
     assert "alice" in preview["stdin_script"]
 
 

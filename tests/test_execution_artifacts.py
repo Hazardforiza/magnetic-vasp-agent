@@ -78,14 +78,14 @@ def release_context(tmp_path: Path) -> dict[str, object]:
     build_review_card(bundle, log_path=tmp_path / "reviews.jsonl")
     record_input_review(
         bundle,
-        reviewer="zyy",
+        reviewer="cluster_user",
         decision="accept",
         log_path=tmp_path / "reviews.jsonl",
     )
     workflow = json.loads((bundle / "workflow.manifest.json").read_bytes())
 
     profile = ClusterProfile(
-        execution_enabled=True, remote_root="/home/zyy/magvasp/runs"
+        execution_enabled=True, remote_root="/home/cluster_user/magvasp/runs"
     )
     source_run = _stamp(
         RunRecord(
@@ -96,9 +96,9 @@ def release_context(tmp_path: Path) -> dict[str, object]:
             events=["prepared", "running"],
             owned_locally=False,
             cluster_execution="remote_mpi",
-            node="cu22",
+            node="node03",
             remote_directory=(
-                "/home/zyy/magvasp/runs/Mn3Al-scf-dos-band--source01/scf"
+                "/home/cluster_user/magvasp/runs/Mn3Al-scf-dos-band--source01/scf"
             ),
             remote_pid=4321,
             executable="vasp_std",
@@ -108,7 +108,7 @@ def release_context(tmp_path: Path) -> dict[str, object]:
         "schema_version": 1,
         "mode": "remote_status",
         "run_id": "source01",
-        "node": "cu22",
+        "node": "node03",
         "remote_directory": source_run.remote_directory,
         "remote_pid": 4321,
         "state": "completed",
@@ -143,7 +143,7 @@ def release_context(tmp_path: Path) -> dict[str, object]:
         "schema_version": 1,
         "mode": "remote_fetch",
         "run_id": "source01",
-        "node": "cu22",
+        "node": "node03",
         "remote_directory": source_run.remote_directory,
         "destination": str(fetched.resolve()),
         "files": file_evidence,
@@ -157,7 +157,7 @@ def release_context(tmp_path: Path) -> dict[str, object]:
     fetch_path.write_bytes(json_bytes(fetch))
 
     transfer_plan = build_transfer_plan(
-        bundle, profile, TransferRequest(node="cu22", run_id="target01")
+        bundle, profile, TransferRequest(node="node03", run_id="target01")
     )
     transfer = transfer_report_model(
         {
@@ -244,9 +244,9 @@ def test_release_binds_converged_fetch_to_declared_dependency(
         workflow_id="Mn3Al-scf-dos-band",
         target_step="dos",
         target_run_id="target01",
-        node="cu22",
+        node="node03",
         target_remote_directory=(
-            "/home/zyy/magvasp/runs/Mn3Al-scf-dos-band--target01/dos"
+            "/home/cluster_user/magvasp/runs/Mn3Al-scf-dos-band--target01/dos"
         ),
         target_transfer_report_sha256=digest(
             release_context["transfer_path"].read_bytes()
@@ -347,9 +347,9 @@ def test_tampered_release_report_is_not_launch_evidence(
         workflow_id="Mn3Al-scf-dos-band",
         target_step="dos",
         target_run_id="target01",
-        node="cu22",
+        node="node03",
         target_remote_directory=(
-            "/home/zyy/magvasp/runs/Mn3Al-scf-dos-band--target01/dos"
+            "/home/cluster_user/magvasp/runs/Mn3Al-scf-dos-band--target01/dos"
         ),
         target_transfer_report_sha256=digest(
             release_context["transfer_path"].read_bytes()
@@ -370,9 +370,9 @@ def test_dependent_launch_requires_and_forwards_release_evidence(
     snapshot = ProbeSnapshot(
         source="ssh_probe",
         observed_at=observed,
-        requested_node="cu22",
-        hostname="cu22.cmphc",
-        username="zyy",
+        requested_node="node03",
+        hostname="node03.example.org",
+        username="cluster_user",
         cpus=[
             Cpu(cpu=index, core=index % 20, socket=(index % 20) // 10, online=True)
             for index in range(40)
@@ -382,28 +382,28 @@ def test_dependent_launch_requires_and_forwards_release_evidence(
         load1=0.0,
         mem_available_kib=8 * 1024 * 1024,
         module_loaded=True,
-        mpi_path="/public/intel/oneapi/mpi/2021.1.1/bin/mpirun",
+        mpi_path="/opt/intel/oneapi/mpi/bin/mpirun",
         executables={"vasp_std": True, "vasp_ncl": True, "vasp_gam": True},
     )
     request = ExecutionRequest(
-        node="cu22", step_id="dos", run_id="target01", mpi_ranks=2
+        node="node03", step_id="dos", run_id="target01", mpi_ranks=2
     )
     grant = build_resource_grant(
         release_context["bundle"],
         release_context["profile"],
         request,
         snapshot,
-        approver="zyy",
+        approver="cluster_user",
         confirm=RESOURCE_GRANT_CONFIRM,
         now=observed,
         valid_for=timedelta(minutes=15),
     )
     smoke = SmokeTestEvidence(
         run_id="target01",
-        node="cu22",
+        node="node03",
         mpi_ranks=2,
         cpu_ids=grant.cpu_ids,
-        hostname="cu22.cmphc",
+        hostname="node03.example.org",
         started_at=observed + timedelta(seconds=1),
         finished_at=observed + timedelta(seconds=2),
         exit_code=0,
@@ -436,7 +436,7 @@ def test_dependent_launch_requires_and_forwards_release_evidence(
         return {
             "marker": "MAGVASP_REMOTE_VASP_V1 target01",
             "workdir": (
-                "/home/zyy/magvasp/runs/Mn3Al-scf-dos-band--target01/dos"
+                "/home/cluster_user/magvasp/runs/Mn3Al-scf-dos-band--target01/dos"
             ),
             "remote_pid": 5432,
             "executable": "vasp_std",

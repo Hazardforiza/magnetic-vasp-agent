@@ -57,7 +57,7 @@ _PLANNER_INSTRUCTIONS = (
     "approved. Before proposing similar parameters, call workflow.review_history; "
     "pass reviewer when the human's cluster username is known. Cluster connection "
     "facts come from a composed profile (shared site plus that person's identity), "
-    "never from assuming username zyy or a particular tunnel. "
+    "never from assuming a username or a particular tunnel. "
     "Never invent MAGMOM, species order, or a band path. Search "
     "the knowledge index for Reference_Demo and skill documents when citing "
     "literature. When knowledge.library_search is available, use it to retrieve "

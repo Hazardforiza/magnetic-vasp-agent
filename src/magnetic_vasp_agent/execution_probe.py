@@ -211,7 +211,7 @@ printf '@@end\\n'
 def _gateway_wrapper(profile: ClusterProfile, node: str, script: str) -> str:
     """Embed the compute-node script so stdin stays free for a password prompt.
 
-    Intra-cluster ssh (mu01 → cuXX) stays BatchMode: that hop is host-key based
+    Intra-cluster SSH from the gateway to a compute node stays BatchMode: that hop is host-key based
     after you are already on the gateway, and must not steal the password TTY.
     """
 

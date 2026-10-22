@@ -137,16 +137,16 @@
     },
     {
       "id": "local-vasp-notes-summary",
-      "title": "Project summary of user-provided VASP notes",
+      "title": "Release sample notes boundary",
       "source_type": "personal_note",
       "location_type": "local_file",
       "content_handling": "project",
-      "path": "docs/vasp_notes_knowledge.md",
+      "path": "release_samples/knowledge/vasp_notes_summary.md",
       "required": true,
       "validated": false,
       "tasks": [],
       "magnetic_modes": [],
-      "notes": "Derived summary, not a substitute for cited official documentation."
+      "notes": "Boundary placeholder only; add private notes locally and validate claims against cited sources."
     },
     {
       "id": "team-cluster-policy",
@@ -183,10 +183,10 @@
       "path": "config/execution/site.team.json",
       "required": true,
       "validated": true,
-      "vasp_versions": ["5.4.4"],
+      "vasp_versions": ["6.4.2"],
       "tasks": [],
       "magnetic_modes": [],
-      "notes": "Machine-readable shared site facts. Personal identity.json and composed cluster.json are not indexed."
+      "notes": "Machine-readable example site values only. Personal identity.json and composed cluster.json are not indexed."
     },
     {
       "id": "local-member-usage",
@@ -242,31 +242,18 @@
       "notes": "Controls provenance, conflict handling, citation and promotion of learned experience."
     },
     {
-      "id": "cluster-maintenance-sanitized-review",
-      "title": "Sanitized review of the historical cluster maintenance manual",
-      "source_type": "personal_note",
-      "location_type": "local_file",
-      "content_handling": "project",
-      "path": "docs/knowledge/cluster_manual_sanitized.md",
-      "required": true,
-      "validated": false,
-      "tasks": [],
-      "magnetic_modes": [],
-      "notes": "The credential-bearing source HTML is excluded; only redacted findings and conflicts are retained."
-    },
-    {
       "id": "reference-demo-library",
       "title": "Local Reference_Demo literature library",
       "source_type": "personal_note",
       "location_type": "local_directory",
       "content_handling": "project",
-      "path": "Reference_Demo/Reference_Demo",
+      "path": "release_samples/reference_demo",
       "required": true,
       "validated": false,
       "tasks": [],
       "magnetic_modes": [],
       "extensions": [".md", ".txt", ".bib"],
-      "notes": "User literature catalog, grouping tree, and BibTeX. Unvalidated; PDFs stay local and are not auto-indexed."
+      "notes": "Sanitized sample literature metadata only; add personal references locally."
     },
     {
       "id": "agent-skill-library",
@@ -274,7 +261,7 @@
       "source_type": "personal_note",
       "location_type": "local_directory",
       "content_handling": "project",
-      "path": "skills/skills",
+      "path": "release_samples/skills",
       "required": true,
       "validated": false,
       "tasks": [],

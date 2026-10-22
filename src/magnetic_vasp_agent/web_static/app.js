@@ -370,7 +370,7 @@ function resourceDraft(project = app.selectedProject) {
 function syncResourceNodeOptions(form) {
   const select = form.elements.resource_node;
   const value = select.value || select.dataset.savedNode || "";
-  const names = app.nodes.map(nodeName).filter((name) => name && name !== "mu01");
+  const names = app.nodes.map(nodeName).filter(Boolean);
   const options = ['<option value="">请选择节点</option>'];
   if (value && !names.includes(value)) options.push(`<option value="${escapeHtml(value)}" disabled>${escapeHtml(value)}（当前未列出）</option>`);
   options.push(...names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`));

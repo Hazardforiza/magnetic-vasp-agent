@@ -21,20 +21,20 @@ from magnetic_vasp_agent.execution_models import (
 )
 
 
-def snapshot(node: str = "cu21") -> ProbeSnapshot:
+def snapshot(node: str = "node02") -> ProbeSnapshot:
     return ProbeSnapshot(
         source="ssh_probe",
         observed_at=datetime.now(UTC),
         requested_node=node,
-        hostname=f"{node}.cmphc",
-        username="zyy",
+        hostname=f"{node}.example.org",
+        username="cluster_user",
         cpus=[Cpu(cpu=i, core=i, socket=0, online=True) for i in range(4)],
         allowed_cpu_ids=[0, 1, 2, 3],
         processes=[],
         load1=0,
         mem_available_kib=1024 * 1024,
         module_loaded=True,
-        mpi_path="/public/intel/oneapi/mpi/2021.1.1/bin/mpirun",
+        mpi_path="/opt/intel/oneapi/mpi/bin/mpirun",
         executables={"vasp_std": True, "vasp_ncl": True, "vasp_gam": True},
     )
 
@@ -49,7 +49,7 @@ def context(tmp_path: Path) -> SimpleNamespace:
     work.mkdir()
     request_path = work / "execution.request.json"
     request = ExecutionRequest(
-        node="cu21", step_id="scf", run_id="run1", mpi_ranks=2, cpu_ids=[0, 1]
+        node="node02", step_id="scf", run_id="run1", mpi_ranks=2, cpu_ids=[0, 1]
     )
     request_path.write_text(request.model_dump_json(), encoding="utf-8")
     probe_path = work / "node.probe.json"
@@ -98,14 +98,14 @@ def test_project_planning_cannot_create_requests_or_execute(context, name):
 
 def test_project_preview_uses_bound_profile_and_node(context):
     result = evaluate(
-        context, "execution.probe", profile=str(context.profile), node="cu21"
+        context, "execution.probe", profile=str(context.profile), node="node02"
     )
     assert result.status == "ok"
     assert result.output["mode"] == "readonly_probe_preview"
     assert result.output["executes_mpi"] is False
 
 
-@pytest.mark.parametrize("node", ["cu20", "mu01"])
+@pytest.mark.parametrize("node", ["node01", "login01"])
 def test_different_node_is_rejected_before_probe(context, monkeypatch, node):
     def unexpected_probe(*args, **kwargs):
         pytest.fail("mismatched node must not reach SSH")
@@ -124,7 +124,7 @@ def test_different_node_is_rejected_before_probe(context, monkeypatch, node):
 
 
 @pytest.mark.parametrize("field, value", [
-    ("node", "cu20"),
+    ("node", "node01"),
     ("mpi_ranks", 1),
     ("cpu_ids", [2, 3]),
     ("step_id", "other-step"),
@@ -139,7 +139,7 @@ def test_saved_request_cannot_change_after_session_binding(context, field, value
         ExecutionRequest.model_validate(changed).model_dump_json(), encoding="utf-8"
     )
     result = evaluate(
-        context, "execution.probe", profile=str(context.profile), node="cu21"
+        context, "execution.probe", profile=str(context.profile), node="node02"
     )
     assert result.status == "validation_error"
     assert "PROJECT_REQUEST_CHANGED" in result.message
@@ -203,11 +203,11 @@ def test_bound_probe_and_resource_assessment_still_need_human_resource_grant(con
         context,
         "execution.probe_live",
         profile=str(context.profile),
-        node="cu21",
+        node="node02",
         output=str(context.probe),
     )
     assert probe.status == "ok"
-    assert calls == [("zyy", "cu21")]
+    assert calls == [("cluster_user", "node02")]
     assert probe.output["mode"] == "project_node_observation"
     assert probe.output["snapshot_path"] == str(context.probe)
     assert probe.output["summary"]["process_count"] == 1
@@ -229,7 +229,7 @@ def test_bound_probe_and_resource_assessment_still_need_human_resource_grant(con
         output=str(context.plan),
     )
     assert result.status == "ok"
-    assert result.output["candidate"] == {"node": "cu21", "mpi_ranks": 2, "cpu_ids": [0, 1]}
+    assert result.output["candidate"] == {"node": "node02", "mpi_ranks": 2, "cpu_ids": [0, 1]}
     assert result.output["approved"] is False
     assert result.output["human_review_required"] is True
     assert result.output["assessment"]["ready_to_run"] is False
@@ -247,7 +247,7 @@ def test_cluster_planning_approval_tier_is_retained(context):
         tool="execution.probe_live",
         arguments={
             "profile": str(context.profile),
-            "node": "cu21",
+            "node": "node02",
             "output": str(context.probe),
         },
     )
@@ -258,7 +258,7 @@ def test_cluster_planning_approval_tier_is_retained(context):
 
 
 def test_other_node_snapshot_cannot_be_used(context):
-    context.probe.write_text(snapshot("cu20").model_dump_json(), encoding="utf-8")
+    context.probe.write_text(snapshot("node01").model_dump_json(), encoding="utf-8")
     result = evaluate(
         context,
         "execution.resource_plan",

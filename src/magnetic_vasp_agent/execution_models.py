@@ -14,14 +14,14 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 from magnetic_vasp_agent.kpoints_models import StrictModel
 from magnetic_vasp_agent.workflow_models import safe_id
 
-DEFAULT_ALLOWED_NODES = ("cu20", "cu21", "cu22", "cu23", "cu38", "cu39", "cu40", "cu41", "cu43", "cu48", "cu49", "cu50")
+DEFAULT_ALLOWED_NODES = tuple(f"node{index:02d}" for index in range(1, 13))
 # Kept as a compatibility alias for callers that used the original policy.
 ALLOWED_NODES = DEFAULT_ALLOWED_NODES
 Node = str
-MPI_PATH = "/public/intel/oneapi/mpi/2021.1.1/bin/mpirun"
-WANNIER_MODULE = "vasp/5.4.4-intel-wannier90"
+MPI_PATH = "/opt/intel/oneapi/mpi/bin/mpirun"
+WANNIER_MODULE = "vasp/6.4.2-intel-wannier90"
 VASP_PATHS = {
-    name: f"/public/vasp/vasp.5.4.4/bin/{name}"
+    name: f"/opt/vasp/bin/{name}"
     for name in ("vasp_std", "vasp_ncl", "vasp_gam")
 }
 Index = Annotated[int, Field(ge=0, le=1048575)]
@@ -36,13 +36,13 @@ class ExecutionModel(StrictModel):
 class ClusterProfile(ExecutionModel):
     schema_version: Literal[1] = 1
     transport: Literal["ssh_direct_mpi"] = "ssh_direct_mpi"
-    gateway: str = "192.168.164.203"
-    gateway_hostname: str = "mu01"
-    user: str = "zyy"
-    port: int = Field(7722, ge=1, le=65535)
+    gateway: str = "gateway.example.org"
+    gateway_hostname: str = "login01"
+    user: str = "cluster_user"
+    port: int = Field(22, ge=1, le=65535)
     node_port: int = Field(22, ge=1, le=65535)
     allowed_nodes: tuple[str, ...] = DEFAULT_ALLOWED_NODES
-    vasp_module: str = "vasp/5.4.4-intel"
+    vasp_module: str = "vasp/6.4.2-intel"
     # Wannier support is a separate VASP build and must be checked explicitly;
     # the ordinary VASP module name cannot establish this capability.
     wannier_module: str = WANNIER_MODULE

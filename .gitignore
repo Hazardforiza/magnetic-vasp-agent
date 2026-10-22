@@ -21,7 +21,7 @@ __pycache__/
 /unused.json
 /config/execution/cluster.json
 /config/execution/identity.json
-/config/execution/Mn3Al.cu22.*.json
+/config/execution/Mn3Al.*.json
 
 # Runtime metadata and generated calculations
 var/*
