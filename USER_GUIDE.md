@@ -7,7 +7,7 @@
 1. 每个人使用自己的 `identity.json`、API key、SSH key、POTCAR 和运行目录，不能复制他人的私有配置。
 2. `execution_enabled` 初始必须是 `false`。输入审核通过不等于允许启动集群。
 3. 密码只在人工 SSH 提示中输入；不能写进 JSON、`.env`、脚本参数、日志或聊天。
-4. API key 只放环境变量（默认 `MAGVASP_LLM_API_KEY`），不能写入 `llm.json` 或 Git。
+4. API key 可放本机 Git 忽略的 `llm.json`，也可放环境变量；绝不能提交到 Git、截图或聊天。
 5. POTCAR 是本机授权数据，只记录来源元数据和哈希，不上传给 LLM、不提交 Git。
 6. `remote_root` 必须包含当前用户自己的账号路径；不能使用他人的家目录。
 7. 节点负载快照只表示当时观察，不表示资源已分配；启动前必须重新 probe 并取得具名批准。
@@ -32,25 +32,58 @@ uv sync --extra agent --extra web --frozen
 
 ## 三、配置本机 POTCAR
 
-每台电脑单独扫描授权目录。扫描不会复制 POTCAR 正文：
+每台电脑单独扫描授权目录。一个 registry 只对应一个 family，扫描根目录的直接子目录必须是包含 `POTCAR` 的元素势目录。若势库同时有 PBE 和 LDA，分别扫描；例如：
 
 ```powershell
+$potcarLibrary = "C:\path\to\赝势库"
+
 uv run --frozen magvasp potcar scan `
-  --root "C:\path\to\potpaw_PBE.54" `
+  --root "$potcarLibrary\potpaw_PBE\potpaw_PBE.54" `
   --family PBE_54 `
-  --output var\potcar_registry.json
+  --output var\potcar_registry_PBE_54.json
+
+uv run --frozen magvasp potcar scan `
+  --root "$potcarLibrary\potpaw_LDA" `
+  --family LDA `
+  --output var\potcar_registry_LDA.json
 ```
 
-检查 `var\potcar_registry.json` 是否只包含路径、元素、版本和 SHA256。不要把该文件或 POTCAR 目录发送给模型或上传到仓库。
+registry 只保存势文件元数据和哈希，不复制 POTCAR 正文。项目默认的 `config\potential_policy.json` 对应 `PBE_54`；LDA 要使用单独审核的 LDA policy，且 policy、registry 和计算请求中的 `xc_family` 必须一致。不要把 PBE 优选势直接套用到 LDA。registry、POTCAR 目录都不要发送给模型或上传到仓库。
 
 ## 四、配置模型
 
 ```powershell
-Copy-Item config\agent\llm.example.json config\agent\llm.json
-$env:MAGVASP_LLM_API_KEY = "your-key"
+if (!(Test-Path config\agent\llm.json)) {
+  Copy-Item config\agent\llm.example.json config\agent\llm.json
+}
+notepad config\agent\llm.json
 ```
 
-编辑 `config/agent/llm.json` 时只填写模型服务地址和模型名；`api_key_env` 指向环境变量名。换终端后需要重新设置环境变量。
+在 `config\agent\llm.json` 中按服务商提供的信息填写 `model`、`base_url` 和 API 协议。最简单的方式是把 `api_key` 从 `null` 替换为服务商签发的 Key；`api_key_env` 仍保持为环境变量名 `MAGVASP_LLM_API_KEY`，不能把 Key 填进这个字段：
+
+```json
+{
+  "provider": "openai_compatible",
+  "model": "服务商提供的准确模型 ID",
+  "base_url": "服务商提供的 OpenAI-compatible API Base URL",
+  "api_key_env": "MAGVASP_LLM_API_KEY",
+  "api_key": "在本机填写服务商 API Key"
+}
+```
+
+程序会优先使用 `api_key`；留空或设为 `null` 时才读取 `api_key_env` 指定的环境变量。`api_key` 会以明文保存在本机 `config\agent\llm.json`，该文件已被 Git 忽略。这种方式最简单，但只适合个人账户使用的电脑；不要提交、分享、同步到公共云盘或截图展示该文件。多人共用或不受信任的电脑应改用环境变量方案。
+
+若选择环境变量方案，在 Windows 开始菜单搜索“编辑账户的环境变量”，在“用户变量”中新建 `MAGVASP_LLM_API_KEY` 并填入 Key；保存后重新打开 PowerShell。验证时只检查是否存在，不要打印值：
+
+```powershell
+if ([string]::IsNullOrWhiteSpace($env:MAGVASP_LLM_API_KEY)) {
+  "API Key 未设置"
+} else {
+  "API Key 已设置"
+}
+```
+
+若 Key 被误填进 `api_key_env`、提交到 Git 或出现在截图中，应立即在服务商处撤销并重新签发。配置错误不会回显输入值。
 
 验证：
 

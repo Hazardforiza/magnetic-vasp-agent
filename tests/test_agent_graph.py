@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from magnetic_vasp_agent.agent.approval import ApprovalPolicy
 from magnetic_vasp_agent.agent.graph import (
     _content_to_text,
     _strip_sentinels,
@@ -51,19 +50,39 @@ def test_strip_sentinels_removes_trailing_markers_only() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# LLM config: secret-free, key only from the environment.                      #
+# LLM config: local key is masked; environment variable remains supported.     #
 # --------------------------------------------------------------------------- #
 
 
-def test_config_rejects_inline_api_key() -> None:
-    with pytest.raises(ValidationError):
-        LlmConfig.model_validate(
-            {
-                "model": "openai/test-model",
-                "base_url": "https://gateway.example.com/v1",
-                "api_key": "sk-secret",
-            }
+def test_resolve_api_key_reads_inline_and_masks_it(monkeypatch) -> None:
+    secret = "sk-inline-secret"
+    monkeypatch.setenv("MAGVASP_TEST_KEY", "sk-from-env")
+    config = LlmConfig(
+        model="openai/test-model",
+        base_url="https://gateway.example.com/v1",
+        api_key_env="MAGVASP_TEST_KEY",
+        api_key=secret,
+    )
+    assert config.resolve_api_key() == secret
+    assert secret not in repr(config)
+    assert secret not in config.model_dump_json()
+
+
+def test_resolve_api_key_falls_back_to_environment(monkeypatch) -> None:
+    monkeypatch.setenv("MAGVASP_TEST_KEY", "sk-from-env")
+    config = _config()
+    assert config.resolve_api_key() == "sk-from-env"
+
+
+def test_config_rejects_api_key_as_env_name_without_echoing_it() -> None:
+    secret = "sk-live-secret-value"
+    with pytest.raises(ValidationError) as exc_info:
+        LlmConfig(
+            model="openai/test-model",
+            base_url="https://gateway.example.com/v1",
+            api_key_env=secret,
         )
+    assert secret not in str(exc_info.value)
 
 
 def test_config_rejects_non_http_base_url() -> None:
@@ -78,7 +97,7 @@ def test_resolve_api_key_reads_environment(monkeypatch) -> None:
 
 def test_resolve_api_key_missing_raises(monkeypatch) -> None:
     monkeypatch.delenv("MAGVASP_TEST_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="MAGVASP_TEST_KEY"):
+    with pytest.raises(RuntimeError, match="environment variable named"):
         _config().resolve_api_key()
 
 

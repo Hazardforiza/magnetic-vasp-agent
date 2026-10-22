@@ -43,23 +43,34 @@ uv sync --extra dev --frozen
 
 ### 1. 注册本机 POTCAR
 
-POTCAR 受许可证保护，不进入 Git、知识库或 LLM 提示。每台电脑独立扫描：
+POTCAR 受许可证保护，不进入 Git、知识库或 LLM 提示。每台电脑独立扫描。一个 registry 只记录一个 family；`--root` 必须是其直接子目录为元素势目录的版本目录。若同时有 PBE 和 LDA，分别扫描并生成 registry：
 
 ```powershell
+$potcarLibrary = "C:\path\to\赝势库"
+
 uv run --frozen magvasp potcar scan `
-  --root "C:\path\to\potpaw_PBE.54" `
+  --root "$potcarLibrary\potpaw_PBE\potpaw_PBE.54" `
   --family PBE_54 `
-  --output var\potcar_registry.json
+  --output var\potcar_registry_PBE_54.json
+
+uv run --frozen magvasp potcar scan `
+  --root "$potcarLibrary\potpaw_LDA" `
+  --family LDA `
+  --output var\potcar_registry_LDA.json
 ```
+
+项目默认策略 `config/potential_policy.json` 和示例请求使用 `PBE_54`。LDA 计算需要另行审核 LDA 势选择，并确保 registry、policy 和计算请求的 `xc_family` 都写为 `LDA`；不要直接复用 PBE 的优选势配置。每次 workflow 使用与其 family 对应的一份 registry 和 policy。
 
 ### 2. 配置模型（可选）
 
 ```powershell
-Copy-Item config\agent\llm.example.json config\agent\llm.json
-$env:MAGVASP_LLM_API_KEY = "在当前终端设置，不要写入 JSON"
+if (!(Test-Path config\agent\llm.json)) {
+  Copy-Item config\agent\llm.example.json config\agent\llm.json
+}
+notepad config\agent\llm.json
 ```
 
-`config/agent/llm.json` 只保存 provider、模型、URL 和环境变量名，不保存密钥。
+按服务商信息填写模型名和 API Base URL，并把 `api_key` 从 `null` 改成服务商签发的 Key。`api_key_env` 保持为 `MAGVASP_LLM_API_KEY`，不要把 Key 填进这个字段。`llm.json` 已被 Git 忽略，Key 以明文保存在本机；不要提交、分享或截图包含它的文件。
 
 ### 3. 配置个人集群身份（可选）
 

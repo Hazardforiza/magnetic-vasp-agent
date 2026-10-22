@@ -19,7 +19,7 @@ uv run --extra agent --extra web --frozen magvasp potcar scan `
   --family PBE_54 --output var\potcar_registry.json
 ```
 
-使用自然语言 Agent 时，从 `config/agent/llm.example.json` 建立本机 `config/agent/llm.json`，配置模型服务，并在当前终端设置该配置所指向的 API key 环境变量。每位组员使用自己的模型凭据。集群执行还需按 [`member_setup.md`](knowledge/member_setup.md) 配置自己的 SSH 身份和站点模板；网页不会代管集群密码。
+使用自然语言 Agent 时，从 `config/agent/llm.example.json` 建立本机 `config/agent/llm.json` 并配置模型服务。API key 可填入本机 `llm.json` 的 `api_key` 字段，也可通过配置指定的环境变量提供；每位组员使用自己的模型凭据。集群执行还需按 [`member_setup.md`](knowledge/member_setup.md) 配置自己的 SSH 身份和站点模板；网页不会代管集群密码。
 
 ## 启动与使用
 
